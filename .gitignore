@@ -4,3 +4,7 @@ __pycache__/
 build/
 dist/
 *.spec
+# Local Python environment and private settings
+.venv/
+.env.*
+!.env.example
