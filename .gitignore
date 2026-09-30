@@ -1,4 +1,6 @@
-x.env
+.env
 __pycache__/
 *.pyc
-.vscode/
+build/
+dist/
+*.spec
