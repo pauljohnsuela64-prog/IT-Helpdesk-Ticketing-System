@@ -10,14 +10,42 @@ class TicketReadError(Exception):
 
 def get_tickets():
     """Return ticket dictionaries from the helpdesk database only."""
+    return _read_tickets(
+        'SELECT ticket_id, employee_name, department, category, '
+        'subject, priority, status, assigned_to '
+        'FROM helpdesk.tickets ORDER BY ticket_id'
+    )
+
+
+def search_tickets(search_term):
+    """Find case-insensitive literal substrings using a read-only SELECT."""
+    search_term = search_term.strip()
+    if not search_term:
+        return []
+    # Escape LIKE wildcards so %, _ and ! in the term match literal text.
+    pattern = '%' + search_term.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+    return _read_tickets(
+        'SELECT ticket_id, employee_name, department, category, '
+        'subject, priority, status, assigned_to FROM helpdesk.tickets '
+        "WHERE LOWER(CAST(ticket_id AS CHAR)) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(employee_name) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(department) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(category) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(subject) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(priority) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(status) LIKE LOWER(%s) ESCAPE '!' "
+        "OR LOWER(assigned_to) LIKE LOWER(%s) ESCAPE '!' "
+        'ORDER BY ticket_id',
+        (pattern,) * 8,
+    )
+
+
+def _read_tickets(query, parameters=None):
+    """Execute the fixed ticket read queries and translate connection errors."""
     try:
         with get_connection() as connection:
             with connection.cursor(dictionary=True) as cursor:
-                cursor.execute(
-                    'SELECT ticket_id, employee_name, department, category, '
-                    'subject, priority, status, assigned_to '
-                    'FROM helpdesk.tickets ORDER BY ticket_id'
-                )
+                cursor.execute(query, parameters)
                 return cursor.fetchall()
     except ValueError:
         raise TicketReadError(

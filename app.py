@@ -1,7 +1,7 @@
 """Command-line entry point for the IT Help Desk Ticketing System."""
 from ticket_repository import (
     CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
-    create_ticket, get_tickets,
+    create_ticket, get_tickets, search_tickets,
 )
 
 
@@ -38,11 +38,29 @@ def view_tickets():
         print('\nNo tickets found.')
         return
 
+    display_tickets(tickets)
+
+
+def display_tickets(tickets):
     for ticket in tickets:
         print('\n' + '-' * 48)
         for label, field in TICKET_FIELDS:
             print(f'{label:<12}: {display_value(ticket[field], field)}')
     print(f'\nTotal tickets: {len(tickets)}')
+
+
+def search_tickets_interactively():
+    print('\nSEARCH TICKETS')
+    search_term = prompt_required('Search term')
+    try:
+        tickets = search_tickets(search_term)
+    except TicketReadError as error:
+        print(f'\n{error}')
+        return
+    if not tickets:
+        print('\nNo tickets match your search. Try another search term.')
+        return
+    display_tickets(tickets)
 
 
 def prompt_required(label, max_length=None):
@@ -89,7 +107,8 @@ def main():
         print('\nIT HELP DESK TICKETING SYSTEM')
         print('1. View Tickets')
         print('2. Create Ticket')
-        print('3. Exit')
+        print('3. Search Tickets')
+        print('4. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
@@ -97,10 +116,12 @@ def main():
             elif choice == '2':
                 create_ticket_interactively()
             elif choice == '3':
+                search_tickets_interactively()
+            elif choice == '4':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Enter 1, 2, or 3.')
+                print('Invalid option. Enter 1, 2, 3, or 4.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return
