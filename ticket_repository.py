@@ -89,6 +89,54 @@ def get_ticket(ticket_id):
     return tickets[0] if tickets else None
 
 
+class TicketDeleteError(Exception):
+    """A safe, user-facing error when deleting a ticket fails."""
+
+
+def delete_ticket(ticket_id):
+    """Delete one exact ID after CLI confirmation; return False if absent."""
+    validate_ticket_id(ticket_id)
+    try:
+        with get_connection() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    # Recheck and lock the ticket in case it disappeared after preview.
+                    cursor.execute(
+                        'SELECT ticket_id FROM helpdesk.tickets '
+                        'WHERE ticket_id = %s FOR UPDATE', (ticket_id,),
+                    )
+                    if cursor.fetchone() is None:
+                        connection.rollback()
+                        return False
+                    cursor.execute(
+                        'DELETE FROM helpdesk.tickets WHERE ticket_id = %s LIMIT 1',
+                        (ticket_id,),
+                    )
+                    if cursor.rowcount != 1:
+                        raise TicketDeleteError(
+                            'Ticket deletion could not be confirmed. '
+                            'Use View Tickets before retrying.'
+                        )
+                connection.commit()
+                return True
+            except (mysql.connector.Error, TicketDeleteError):
+                try:
+                    connection.rollback()
+                except mysql.connector.Error:
+                    pass
+                raise
+    except ValueError:
+        raise TicketDeleteError(
+            'Check your environment settings. DB_NAME must be helpdesk and '
+            'all required connection settings must be supplied.'
+        ) from None
+    except mysql.connector.Error as error:
+        raise TicketDeleteError(
+            f'Ticket deletion could not be confirmed (MySQL error code: {error.errno}). '
+            'Check your connection and use View Tickets before retrying.'
+        ) from None
+
+
 def update_ticket(ticket_id, changes):
     """Validate editable fields and atomically update an existing ticket.
 

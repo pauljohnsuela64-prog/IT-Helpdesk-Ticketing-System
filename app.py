@@ -1,8 +1,8 @@
 """Command-line entry point for the IT Help Desk Ticketing System."""
 from ticket_repository import (
     CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
-    STATUSES, TicketUpdateError, create_ticket, get_ticket, get_tickets,
-    search_tickets, update_ticket,
+    STATUSES, TicketDeleteError, TicketUpdateError, create_ticket, delete_ticket,
+    get_ticket, get_tickets, search_tickets, update_ticket, validate_ticket_id,
 )
 
 
@@ -48,6 +48,13 @@ def display_tickets(tickets):
         for label, field in TICKET_FIELDS:
             print(f'{label:<12}: {display_value(ticket[field], field)}')
     print(f'\nTotal tickets: {len(tickets)}')
+
+
+def display_ticket_details(ticket):
+    display_tickets([ticket])
+    for label, field in (('Description', 'description'), ('Created at', 'created_at'),
+                         ('Updated at', 'updated_at'), ('Resolved at', 'resolved_at')):
+        print(f'{label:<12}: {display_value(ticket[field], field)}')
 
 
 def search_tickets_interactively():
@@ -151,10 +158,7 @@ def update_ticket_interactively():
         return
 
     print('\nCurrent ticket information:')
-    display_tickets([ticket])
-    for label, field in (('Description', 'description'), ('Created at', 'created_at'),
-                         ('Updated at', 'updated_at'), ('Resolved at', 'resolved_at')):
-        print(f'{label:<12}: {display_value(ticket[field], field)}')
+    display_ticket_details(ticket)
     print('\nPress Enter to keep each current value.')
     changes = {}
     for label, field, limit, choices in EDIT_FIELDS:
@@ -189,6 +193,44 @@ def update_ticket_interactively():
     print('\nTicket updated successfully.' if saved else '\nNo changes made.')
 
 
+def delete_ticket_interactively():
+    print('\nDELETE TICKET')
+    raw_id = input('Ticket ID: ').strip()
+    if not raw_id.isascii() or not raw_id.isdecimal():
+        print('Ticket ID must be a positive number up to 2147483647.')
+        return
+    try:
+        ticket_id = int(raw_id)
+        validate_ticket_id(ticket_id)
+        ticket = get_ticket(ticket_id)
+    except (TicketReadError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if ticket is None:
+        print('\nNo ticket found with that ID.')
+        return
+
+    print('\nTicket to delete:')
+    display_ticket_details(ticket)
+    try:
+        confirmation = input('Type Y or YES to permanently delete this ticket: ').strip()
+    except (EOFError, KeyboardInterrupt):
+        print('\nDeletion cancelled. No ticket was deleted.')
+        return
+    if confirmation not in ('Y', 'YES'):
+        print('\nDeletion cancelled. No ticket was deleted.')
+        return
+    try:
+        deleted = delete_ticket(ticket_id)
+    except (TicketDeleteError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if deleted:
+        print(f'\nTicket {ticket_id} deleted successfully.')
+    else:
+        print('\nNo ticket found with that ID. No ticket was deleted.')
+
+
 def main():
     while True:
         print('\nIT HELP DESK TICKETING SYSTEM')
@@ -196,7 +238,8 @@ def main():
         print('2. Create Ticket')
         print('3. Search Tickets')
         print('4. Update Ticket')
-        print('5. Exit')
+        print('5. Delete Ticket')
+        print('6. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
@@ -208,10 +251,12 @@ def main():
             elif choice == '4':
                 update_ticket_interactively()
             elif choice == '5':
+                delete_ticket_interactively()
+            elif choice == '6':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Enter 1, 2, 3, 4, or 5.')
+                print('Invalid option. Please choose a number from 1 to 6.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return
