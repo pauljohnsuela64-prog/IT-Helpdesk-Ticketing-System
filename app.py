@@ -1,7 +1,8 @@
 """Command-line entry point for the IT Help Desk Ticketing System."""
 from ticket_repository import (
     CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
-    create_ticket, get_tickets, search_tickets,
+    STATUSES, TicketUpdateError, create_ticket, get_ticket, get_tickets,
+    search_tickets, update_ticket,
 )
 
 
@@ -102,13 +103,100 @@ def create_ticket_interactively():
     print(f'\nTicket created successfully. New ticket ID: {ticket_id}')
 
 
+EDIT_FIELDS = (
+    ('Employee name', 'employee_name', 100, None),
+    ('Department', 'department', 100, None),
+    ('Category', 'category', 50, CATEGORIES),
+    ('Subject', 'subject', 150, None),
+    ('Description', 'description', None, None),
+    ('Priority', 'priority', 20, PRIORITIES),
+    ('Status', 'status', 20, STATUSES),
+    ('Assigned To', 'assigned_to', 100, None),
+)
+
+
+def prompt_edit(label, field, current, max_length, choices):
+    if choices:
+        print(f'{label} options: ' + ', '.join(choices))
+    while True:
+        value = input(f'{label} [{display_value(current, field)}]: ').strip()
+        if not value:
+            return current
+        if choices:
+            for choice in choices:
+                if value.casefold() == choice.casefold():
+                    return choice
+            print('Enter one of: ' + ', '.join(choices))
+        elif max_length is not None and len(value) > max_length:
+            print(f'{label} must be at most {max_length} characters.')
+        elif field == 'description' and len(value.encode('utf-8')) > 65535:
+            print('Description is too long (maximum 65535 UTF-8 bytes).')
+        else:
+            return value
+
+
+def update_ticket_interactively():
+    print('\nUPDATE TICKET')
+    raw_id = input('Ticket ID: ').strip()
+    if not raw_id.isascii() or not raw_id.isdecimal():
+        print('Ticket ID must be a positive number up to 2147483647.')
+        return
+    try:
+        ticket = get_ticket(int(raw_id))
+    except (TicketReadError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if ticket is None:
+        print('\nNo ticket found with that ID.')
+        return
+
+    print('\nCurrent ticket information:')
+    display_tickets([ticket])
+    for label, field in (('Description', 'description'), ('Created at', 'created_at'),
+                         ('Updated at', 'updated_at'), ('Resolved at', 'resolved_at')):
+        print(f'{label:<12}: {display_value(ticket[field], field)}')
+    print('\nPress Enter to keep each current value.')
+    changes = {}
+    for label, field, limit, choices in EDIT_FIELDS:
+        value = prompt_edit(label, field, ticket[field], limit, choices)
+        if value != ticket[field]:
+            changes[field] = value
+    if not changes:
+        print('\nNo changes made.')
+        return
+
+    print('\nProposed changes:')
+    for label, field, _, _ in EDIT_FIELDS:
+        if field in changes:
+            print(f'{label}: {display_value(ticket[field], field)} -> '
+                  f'{display_value(changes[field], field)}')
+    if 'status' in changes:
+        print('Resolved at will be set to the save time.' if changes['status'] == 'Resolved'
+              else 'Resolved at will be cleared.')
+    while True:
+        confirmation = input('Save these changes? (y/n): ').strip().casefold()
+        if confirmation in ('n', 'no', ''):
+            print('\nUpdate cancelled. No changes saved.')
+            return
+        if confirmation in ('y', 'yes'):
+            break
+        print('Enter y or n.')
+    try:
+        saved = update_ticket(ticket['ticket_id'], changes)
+    except (TicketUpdateError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    print('\nTicket updated successfully.' if saved else '\nNo changes made.')
+
+
 def main():
     while True:
         print('\nIT HELP DESK TICKETING SYSTEM')
         print('1. View Tickets')
         print('2. Create Ticket')
         print('3. Search Tickets')
-        print('4. Exit')
+        print('4. Update Ticket')
+        print('5. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
@@ -118,10 +206,12 @@ def main():
             elif choice == '3':
                 search_tickets_interactively()
             elif choice == '4':
+                update_ticket_interactively()
+            elif choice == '5':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Enter 1, 2, 3, or 4.')
+                print('Invalid option. Enter 1, 2, 3, 4, or 5.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return
