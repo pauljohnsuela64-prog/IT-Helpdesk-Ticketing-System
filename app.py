@@ -1,5 +1,8 @@
-﻿"""Command-line entry point for the IT Help Desk Ticketing System."""
-from ticket_repository import TicketReadError, get_tickets
+"""Command-line entry point for the IT Help Desk Ticketing System."""
+from ticket_repository import (
+    CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
+    create_ticket, get_tickets,
+)
 
 
 TICKET_FIELDS = (
@@ -42,20 +45,62 @@ def view_tickets():
     print(f'\nTotal tickets: {len(tickets)}')
 
 
+def prompt_required(label, max_length=None):
+    while True:
+        value = input(f'{label}: ').strip()
+        if not value:
+            print(f'{label} is required.')
+        elif max_length is not None and len(value) > max_length:
+            print(f'{label} must be at most {max_length} characters.')
+        elif label == 'Description' and len(value.encode('utf-8')) > 65535:
+            print('Description is too long (maximum 65535 UTF-8 bytes).')
+        else:
+            return value
+
+
+def prompt_choice(label, choices):
+    print(f'{label} options: ' + ', '.join(choices))
+    while True:
+        value = input(f'{label}: ').strip()
+        for choice in choices:
+            if value.casefold() == choice.casefold():
+                return choice
+        print('Enter one of: ' + ', '.join(choices))
+
+
+def create_ticket_interactively():
+    print('\nCREATE TICKET')
+    employee = prompt_required('Employee name', 100)
+    department = prompt_required('Department', 100)
+    category = prompt_choice('Category', CATEGORIES)
+    subject = prompt_required('Subject', 150)
+    description = prompt_required('Description')
+    priority = prompt_choice('Priority', PRIORITIES)
+    try:
+        ticket_id = create_ticket(employee, department, category, subject, description, priority)
+    except (TicketCreateError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    print(f'\nTicket created successfully. New ticket ID: {ticket_id}')
+
+
 def main():
     while True:
         print('\nIT HELP DESK TICKETING SYSTEM')
         print('1. View Tickets')
-        print('2. Exit')
+        print('2. Create Ticket')
+        print('3. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
                 view_tickets()
             elif choice == '2':
+                create_ticket_interactively()
+            elif choice == '3':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Enter 1 or 2.')
+                print('Invalid option. Enter 1, 2, or 3.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return
