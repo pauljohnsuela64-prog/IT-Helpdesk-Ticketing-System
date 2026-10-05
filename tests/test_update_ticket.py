@@ -98,6 +98,7 @@ class CliTests(unittest.TestCase):
     def run_edit(self, inputs, current=None, error=None):
         output = io.StringIO()
         with patch('builtins.input', side_effect=inputs), \
+             patch.object(app, 'get_active_technicians', return_value=[{'technician_id': 12, 'full_name': 'Sam'}]), \
              patch.object(app, 'get_ticket', return_value=current), \
              patch.object(app, 'update_ticket', return_value=True, side_effect=error) as save, \
              redirect_stdout(output):
@@ -122,9 +123,9 @@ class CliTests(unittest.TestCase):
 
     def test_validation_reprompts_and_normalizes(self):
         output, save = self.run_edit(
-            ['7', '', '', 'bad', 'software', '', '', 'urgent', 'HIGH', 'done', 'in progress', 'Sam', 'yes'], ticket())
+            ['7', '', '', 'bad', 'software', '', '', 'urgent', 'HIGH', 'done', 'in progress', '1', 'yes'], ticket())
         save.assert_called_once_with(7, {'category': 'Software', 'priority': 'High',
-                                       'status': 'In Progress', 'assigned_to': 'Sam'})
+                                       'status': 'In Progress'}, technician_id=12)
         self.assertIn('Enter one of:', output)
 
     def test_invalid_missing_and_database_errors(self):

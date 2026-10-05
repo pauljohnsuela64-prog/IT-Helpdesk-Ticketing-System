@@ -50,13 +50,45 @@ def setup_technicians_table():
 
 def get_technicians():
     """Return technician dictionaries ordered by their generated ID."""
+    return _read_technicians(
+        'SELECT technician_id, full_name, email, status '
+        'FROM helpdesk.technicians ORDER BY technician_id'
+    )
+
+
+def get_active_technicians():
+    """Return only active technicians for the assignment selection list."""
+    return _read_technicians(
+        'SELECT technician_id, full_name, email, status '
+        'FROM helpdesk.technicians WHERE status = %s ORDER BY technician_id',
+        ('Active',),
+    )
+
+
+def validate_technician_id(technician_id):
+    if type(technician_id) is not int or not 1 <= technician_id <= 2147483647:
+        raise ValueError('Technician ID must be a positive number up to 2147483647.')
+
+
+def get_active_technician(technician_id, cursor):
+    """Recheck an assignment using the ticket update's dictionary cursor."""
+    validate_technician_id(technician_id)
+    cursor.execute(
+        'SELECT technician_id, full_name FROM helpdesk.technicians '
+        'WHERE technician_id = %s AND status = %s',
+        (technician_id, 'Active'),
+    )
+    return cursor.fetchone()
+
+
+def _read_technicians(query, parameters=None):
     try:
         with get_connection() as connection:
             with connection.cursor(dictionary=True) as cursor:
-                cursor.execute(
-                    'SELECT technician_id, full_name, email, status '
-                    'FROM helpdesk.technicians ORDER BY technician_id'
-                )
+                if parameters is None:
+                    cursor.execute(query)
+                else:
+                    cursor.execute(query, parameters)
                 return cursor.fetchall()
     except ValueError:
         raise TechnicianReadError(CONFIGURATION_MESSAGE) from None

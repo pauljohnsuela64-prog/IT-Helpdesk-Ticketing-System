@@ -5,7 +5,8 @@ from ticket_repository import (
     get_ticket, get_tickets, search_tickets, update_ticket, validate_ticket_id,
 )
 from technician_repository import (
-    TechnicianCreateError, TechnicianReadError, add_technician, get_technicians,
+    TechnicianCreateError, TechnicianReadError, add_technician,
+    get_active_technicians, get_technicians,
 )
 
 
@@ -145,6 +146,33 @@ def prompt_edit(label, field, current, max_length, choices):
             return value
 
 
+def prompt_assigned_technician(current):
+    technicians = get_active_technicians()
+    print(f'\nAssigned To: {display_value(current, "assigned_to")}')
+    if technicians:
+        print('Active technicians:')
+        for number, technician in enumerate(technicians, start=1):
+            print(f'{number}. {display_value(technician["full_name"], "full_name")}')
+    else:
+        print('No active technicians are available. You can keep or remove the current assignment.')
+    print('0. Unassign technician')
+    while True:
+        selection = input('Select a technician number (Enter to keep current): ').strip()
+        if not selection:
+            return current, None
+        if selection == '0':
+            return None, None
+        if selection.isascii() and selection.isdecimal():
+            try:
+                number = int(selection)
+            except ValueError:
+                number = -1
+            if 1 <= number <= len(technicians):
+                technician = technicians[number - 1]
+                return technician['full_name'], technician['technician_id']
+        print('Invalid selection. Choose a listed number, 0 to unassign, or Enter to keep current.')
+
+
 def update_ticket_interactively():
     print('\nUPDATE TICKET')
     raw_id = input('Ticket ID: ').strip()
@@ -164,21 +192,34 @@ def update_ticket_interactively():
     display_ticket_details(ticket)
     print('\nPress Enter to keep each current value.')
     changes = {}
+    selected_technician_id = None
     for label, field, limit, choices in EDIT_FIELDS:
-        value = prompt_edit(label, field, ticket[field], limit, choices)
-        if value != ticket[field]:
+        if field == 'assigned_to':
+            try:
+                value, selected_technician_id = prompt_assigned_technician(ticket[field])
+            except TechnicianReadError as error:
+                print(f'\n{error}')
+                return
+        else:
+            value = prompt_edit(label, field, ticket[field], limit, choices)
+        if value != ticket[field] or (field == 'assigned_to' and selected_technician_id is not None):
             changes[field] = value
     if not changes:
         print('\nNo changes made.')
         return
 
+    proposed_changes = changes.copy()
+    if (selected_technician_id is not None and ticket['status'] == 'Open'
+            and changes.get('status', 'Open') == 'Open'):
+        proposed_changes['status'] = 'Assigned'
+        print('\nAssigning a technician changes an Open ticket to Assigned.')
     print('\nProposed changes:')
     for label, field, _, _ in EDIT_FIELDS:
-        if field in changes:
+        if field in proposed_changes:
             print(f'{label}: {display_value(ticket[field], field)} -> '
-                  f'{display_value(changes[field], field)}')
-    if 'status' in changes:
-        print('Resolved at will be set to the save time.' if changes['status'] == 'Resolved'
+                  f'{display_value(proposed_changes[field], field)}')
+    if 'status' in proposed_changes:
+        print('Resolved at will be set to the save time.' if proposed_changes['status'] == 'Resolved'
               else 'Resolved at will be cleared.')
     while True:
         confirmation = input('Save these changes? (y/n): ').strip().casefold()
@@ -189,7 +230,15 @@ def update_ticket_interactively():
             break
         print('Enter y or n.')
     try:
-        saved = update_ticket(ticket['ticket_id'], changes)
+        if selected_technician_id is not None:
+            # The repository resolves the selected ID to its current active name.
+            repository_changes = {
+                field: value for field, value in changes.items() if field != 'assigned_to'
+            }
+            saved = update_ticket(ticket['ticket_id'], repository_changes,
+                                  technician_id=selected_technician_id)
+        else:
+            saved = update_ticket(ticket['ticket_id'], changes)
     except (TicketUpdateError, ValueError) as error:
         print(f'\n{error}')
         return

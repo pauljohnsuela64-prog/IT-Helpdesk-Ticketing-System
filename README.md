@@ -65,3 +65,18 @@ Run automated tests without connecting to a live database:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Assign a Technician to a Ticket
+
+Choose **4. Update Ticket**, enter the ticket ID, and continue to **Assigned To**.
+The prompt lists only active technicians. Select a list number to assign that
+technician, press Enter to keep the current assignment, or enter `0` to unassign.
+Invalid selections are rejected. If none are active, keeping or removing the
+current assignment remains available.
+
+Review the proposed changes and confirm saving as usual. Selecting a technician
+for an Open ticket changes its status to Assigned unless you explicitly choose
+another status. Other current statuses are preserved unless you edit Status.
+Unassigning leaves the status unchanged unless you edit it. The repository
+rechecks that the selected technician exists and is Active before saving their
+name into the existing `assigned_to` field. No schema migration is required.

@@ -2,6 +2,7 @@
 import mysql.connector
 
 from database import get_connection
+from technician_repository import get_active_technician, validate_technician_id
 
 
 class TicketReadError(Exception):
@@ -137,20 +138,28 @@ def delete_ticket(ticket_id):
         ) from None
 
 
-def update_ticket(ticket_id, changes):
+def update_ticket(ticket_id, changes, *, technician_id=None):
     """Validate editable fields and atomically update an existing ticket.
 
     Return False for an unchanged ticket. Resolution time is preserved while
     Resolved, set on entering Resolved, and cleared for all other statuses.
+    A technician ID selects an active technician; assigned_to=None unassigns.
+    Selecting a technician changes Open to Assigned unless another status is chosen.
     """
     validate_ticket_id(ticket_id)
+    if technician_id is not None:
+        validate_technician_id(technician_id)
+        if 'assigned_to' in changes:
+            raise ValueError('Choose a technician or unassign, not both.')
     limits = {'employee_name': 100, 'department': 100, 'category': 50,
               'subject': 150, 'priority': 20, 'status': 20, 'assigned_to': 100}
     validated = {}
     for field, value in changes.items():
         if field not in EDITABLE_FIELDS:
             raise ValueError('Only editable ticket fields can be changed.')
-        if field == 'assigned_to' and value is None:
+        if field == 'assigned_to':
+            if value is not None:
+                raise ValueError('Select an active technician instead of typing a name.')
             validated[field] = None
             continue
         if not isinstance(value, str) or not value.strip():
@@ -178,6 +187,16 @@ def update_ticket(ticket_id, changes):
                     current = cursor.fetchone()
                     if current is None:
                         raise TicketUpdateError('No ticket found with that ID.')
+                    if technician_id is not None:
+                        technician = get_active_technician(technician_id, cursor)
+                        if technician is None:
+                            raise TicketUpdateError(
+                                'The selected technician is no longer active or does not exist. '
+                                'Choose an active technician and try again.'
+                            )
+                        validated['assigned_to'] = technician['full_name']
+                        if current['status'] == 'Open' and validated.get('status', 'Open') == 'Open':
+                            validated['status'] = 'Assigned'
                     if all(current[field] == value for field, value in validated.items()):
                         connection.rollback()
                         return False
