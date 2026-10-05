@@ -6,8 +6,9 @@ from ticket_repository import (
     get_ticket, get_tickets, search_tickets, update_ticket, validate_ticket_id,
 )
 from technician_repository import (
-    TechnicianCreateError, TechnicianReadError, add_technician,
-    get_active_technicians, get_technicians,
+    TECHNICIAN_STATUSES, TechnicianCreateError, TechnicianReadError, TechnicianUpdateError,
+    add_technician, get_active_technicians, get_technician, get_technicians,
+    update_technician_status, validate_technician_id,
 )
 
 
@@ -288,6 +289,10 @@ def view_technicians():
     if not technicians:
         print('\nNo technicians found yet. Choose Add Technician to add one.')
         return
+    display_technicians(technicians)
+
+
+def display_technicians(technicians):
     for technician in technicians:
         print('\n' + '-' * 48)
         for label, field in (('Technician ID', 'technician_id'), ('Full Name', 'full_name'),
@@ -308,21 +313,73 @@ def add_technician_interactively():
     print(f'\nTechnician added successfully. New technician ID: {technician_id}')
 
 
+def change_technician_status_interactively():
+    print('\nCHANGE TECHNICIAN STATUS')
+    try:
+        technicians = get_technicians()
+    except TechnicianReadError as error:
+        print(f'\n{error}')
+        return
+    if not technicians:
+        print('\nNo technicians found yet. Choose Add Technician to add one.')
+        return
+    display_technicians(technicians)
+    raw_id = input('Technician ID: ').strip()
+    if not raw_id.isascii() or not raw_id.isdecimal():
+        print('Technician ID must be a positive number up to 2147483647.')
+        return
+    try:
+        technician_id = int(raw_id)
+        validate_technician_id(technician_id)
+        technician = get_technician(technician_id)
+    except (TechnicianReadError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if technician is None:
+        print('\nNo technician found with that ID.')
+        return
+    print('\nSelected technician:')
+    display_technicians([technician])
+    status = prompt_choice('New status', TECHNICIAN_STATUSES)
+    if status == technician['status']:
+        print(f'\nTechnician is already {status}. No changes made.')
+        return
+    print(f'\nProposed status change: {display_value(technician["status"], "status")} -> {status}')
+    try:
+        confirmation = input('Save this status change? (y/n): ').strip().casefold()
+    except (EOFError, KeyboardInterrupt):
+        print('\nStatus change cancelled. No changes saved.')
+        return
+    if confirmation not in ('y', 'yes'):
+        print('\nStatus change cancelled. No changes saved.')
+        return
+    try:
+        saved = update_technician_status(technician_id, status)
+    except (TechnicianUpdateError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    print(f'\nTechnician {technician_id} status changed to {status} successfully.'
+          if saved else '\nNo changes made.')
+
+
 def manage_technicians():
     while True:
         print('\nMANAGE TECHNICIANS')
         print('1. View Technicians')
         print('2. Add Technician')
-        print('3. Back')
+        print('3. Change Technician Status')
+        print('4. Back')
         choice = input('Select an option: ').strip()
         if choice == '1':
             view_technicians()
         elif choice == '2':
             add_technician_interactively()
         elif choice == '3':
+            change_technician_status_interactively()
+        elif choice == '4':
             return
         else:
-            print('Invalid option. Please choose a number from 1 to 3.')
+            print('Invalid option. Please choose a number from 1 to 4.')
 
 
 def main():

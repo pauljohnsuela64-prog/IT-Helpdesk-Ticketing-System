@@ -44,7 +44,7 @@ class TechnicianRepositoryTests(unittest.TestCase):
         self.assertEqual(technicians.get_active_technician(35, cursor), ACTIVE_TECHNICIANS[1])
         cursor.execute.assert_called_once_with(
             'SELECT technician_id, full_name FROM helpdesk.technicians '
-            'WHERE technician_id = %s AND status = %s', (35, 'Active'),
+            'WHERE technician_id = %s AND status = %s FOR UPDATE', (35, 'Active'),
         )
         cursor.fetchone.return_value = None
         self.assertIsNone(technicians.get_active_technician(35, cursor))

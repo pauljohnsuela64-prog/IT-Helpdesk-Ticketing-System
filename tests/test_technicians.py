@@ -179,19 +179,21 @@ class CliTests(unittest.TestCase):
 
     def test_submenu_routes_view_add_and_back(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['abc', '4', '1', '2', '3']), \
+        with patch('builtins.input', side_effect=['abc', '5', '1', '2', '3', '4']), \
              patch.object(app, 'view_technicians') as view, \
+             patch.object(app, 'change_technician_status_interactively') as change, \
              patch.object(app, 'add_technician_interactively') as add, redirect_stdout(output):
             app.manage_technicians()
         view.assert_called_once_with()
         add.assert_called_once_with()
+        change.assert_called_once_with()
         self.assertEqual(output.getvalue().count('Invalid option.'), 2)
-        for label in ('1. View Technicians', '2. Add Technician', '3. Back'):
+        for label in ('1. View Technicians', '2. Add Technician', '3. Change Technician Status', '4. Back'):
             self.assertIn(label, output.getvalue())
 
     def test_main_menu_and_submenu_back_then_exit(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['abc', '8', '6', '3', '7']), redirect_stdout(output):
+        with patch('builtins.input', side_effect=['abc', '8', '6', '4', '7']), redirect_stdout(output):
             app.main()
         self.assertIn('6. Manage Technicians', output.getvalue())
         self.assertIn('7. Exit', output.getvalue())

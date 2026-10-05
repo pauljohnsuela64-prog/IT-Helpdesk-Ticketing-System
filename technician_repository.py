@@ -19,6 +19,7 @@ CONFIGURATION_MESSAGE = (
     'all required connection settings must be supplied.'
 )
 SETUP_MESSAGE = 'Run python setup_technicians.py to set up helpdesk.technicians.'
+TECHNICIAN_STATUSES = ('Active', 'Inactive')
 
 
 class TechnicianReadError(Exception):
@@ -27,6 +28,10 @@ class TechnicianReadError(Exception):
 
 class TechnicianCreateError(Exception):
     """A safe, user-facing error when a technician cannot be saved."""
+
+
+class TechnicianUpdateError(Exception):
+    """A safe, user-facing error when a technician status cannot be saved."""
 
 
 class TechnicianSetupError(Exception):
@@ -71,12 +76,67 @@ def validate_technician_id(technician_id):
         raise ValueError('Technician ID must be a positive number up to 2147483647.')
 
 
+def get_technician(technician_id):
+    """Return an existing technician regardless of status, or None."""
+    validate_technician_id(technician_id)
+    technicians = _read_technicians(
+        'SELECT technician_id, full_name, email, status '
+        'FROM helpdesk.technicians WHERE technician_id = %s',
+        (technician_id,),
+    )
+    return technicians[0] if technicians else None
+
+
+def update_technician_status(technician_id, status):
+    """Change only one technician's status; return False if unchanged."""
+    validate_technician_id(technician_id)
+    status = validate_text(status, 'Status', 20)
+    if status not in TECHNICIAN_STATUSES:
+        raise ValueError('Technician status must be Active or Inactive.')
+    try:
+        with get_connection() as connection:
+            try:
+                with connection.cursor(dictionary=True) as cursor:
+                    cursor.execute(
+                        'SELECT technician_id, status FROM helpdesk.technicians '
+                        'WHERE technician_id = %s FOR UPDATE',
+                        (technician_id,),
+                    )
+                    current = cursor.fetchone()
+                    if current is None:
+                        raise TechnicianUpdateError('No technician found with that ID.')
+                    if current['status'] == status:
+                        connection.rollback()
+                        return False
+                    cursor.execute(
+                        'UPDATE helpdesk.technicians SET status = %s WHERE technician_id = %s',
+                        (status, technician_id),
+                    )
+                connection.commit()
+                return True
+            except (mysql.connector.Error, TechnicianUpdateError):
+                try:
+                    connection.rollback()
+                except mysql.connector.Error:
+                    pass
+                raise
+    except ValueError:
+        raise TechnicianUpdateError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno == 1146:
+            raise TechnicianUpdateError(SETUP_MESSAGE) from None
+        raise TechnicianUpdateError(
+            f'Technician status change could not be confirmed (MySQL error code: {error.errno}). '
+            'Check your connection and use View Technicians before retrying.'
+        ) from None
+
+
 def get_active_technician(technician_id, cursor):
     """Recheck an assignment using the ticket update's dictionary cursor."""
     validate_technician_id(technician_id)
     cursor.execute(
         'SELECT technician_id, full_name FROM helpdesk.technicians '
-        'WHERE technician_id = %s AND status = %s',
+        'WHERE technician_id = %s AND status = %s FOR UPDATE',
         (technician_id, 'Active'),
     )
     return cursor.fetchone()
