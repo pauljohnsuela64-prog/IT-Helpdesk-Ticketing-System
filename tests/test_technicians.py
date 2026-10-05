@@ -193,11 +193,11 @@ class CliTests(unittest.TestCase):
 
     def test_main_menu_and_submenu_back_then_exit(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['abc', '9', '6', '4', '8']), redirect_stdout(output):
+        with patch('builtins.input', side_effect=['abc', '10', '6', '4', '9']), redirect_stdout(output):
             app.main()
         self.assertIn('6. Manage Technicians', output.getvalue())
-        self.assertIn('8. Exit', output.getvalue())
-        self.assertEqual(output.getvalue().count('Invalid option. Please choose a number from 1 to 8.'), 2)
+        self.assertIn('9. Exit', output.getvalue())
+        self.assertEqual(output.getvalue().count('Invalid option. Please choose a number from 1 to 9.'), 2)
         self.assertIn('MANAGE TECHNICIANS', output.getvalue())
         self.assertIn('Goodbye!', output.getvalue())
 

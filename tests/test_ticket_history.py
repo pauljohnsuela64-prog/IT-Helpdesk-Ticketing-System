@@ -254,14 +254,14 @@ class CliTests(unittest.TestCase):
             app.update_ticket_interactively()
         update.assert_not_called()
 
-    def test_main_menu_routes_history_and_exits_with_eight(self):
+    def test_main_menu_routes_history_and_exits_with_nine(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['7', '8']), \
+        with patch('builtins.input', side_effect=['7', '9']), \
              patch.object(app, 'view_ticket_history') as view, redirect_stdout(output):
             app.main()
         view.assert_called_once_with()
         self.assertIn('7. View Ticket History', output.getvalue())
-        self.assertIn('8. Exit', output.getvalue())
+        self.assertIn('9. Exit', output.getvalue())
 
 
 class SetupCommandTests(unittest.TestCase):

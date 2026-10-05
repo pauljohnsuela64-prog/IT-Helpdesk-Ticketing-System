@@ -139,7 +139,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('Unable to save', output)
 
     def test_existing_menu_routes_and_new_exit(self):
-        with patch('builtins.input', side_effect=['1', '2', '3', '4', '8']), \
+        with patch('builtins.input', side_effect=['1', '2', '3', '4', '9']), \
              patch.object(app, 'view_tickets') as view, \
              patch.object(app, 'create_ticket_interactively') as create, \
              patch.object(app, 'search_tickets_interactively') as search, \

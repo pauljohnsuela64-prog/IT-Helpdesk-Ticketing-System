@@ -20,3 +20,13 @@ def validate_text(value, label, max_length=None):
     if label == 'Description' and len(value.encode('utf-8')) > 65535:
         raise ValueError('Description is too long (maximum 65535 UTF-8 bytes).')
     return value
+
+
+def validate_comment_text(value):
+    """Trim a note and require at least three letters or numbers."""
+    value = validate_text(value, 'Note')
+    if sum(character.isalnum() for character in value) < 3:
+        raise ValueError('Note must contain at least 3 letters or numbers.')
+    if len(value.encode('utf-8')) > 65535:
+        raise ValueError('Note is too long (maximum 65535 UTF-8 bytes).')
+    return value

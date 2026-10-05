@@ -1,5 +1,9 @@
 """Command-line entry point for the IT Help Desk Ticketing System."""
-from input_validation import validate_text
+from input_validation import validate_comment_text, validate_text
+from ticket_comment_repository import (
+    TicketCommentCreateError, TicketCommentDeleteError, TicketCommentReadError,
+    add_ticket_comment, delete_ticket_comment, get_ticket_comments, validate_comment_id,
+)
 from ticket_history_repository import TicketHistoryReadError, get_ticket_history
 from ticket_repository import (
     CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
@@ -262,7 +266,7 @@ def delete_ticket_interactively():
 
     print('\nTicket to delete:')
     display_ticket_details(ticket)
-    print('Deleting this ticket also removes its activity history.')
+    print('Deleting this ticket also removes its activity history and notes.')
     try:
         confirmation = input('Type Y or YES to permanently delete this ticket: ').strip()
     except (EOFError, KeyboardInterrupt):
@@ -411,6 +415,173 @@ def view_ticket_history():
               f'{display_value(activity["details"], "details")}')
 
 
+def select_ticket_for_notes():
+    raw_id = input('Ticket ID: ').strip()
+    if (not raw_id.isascii() or not raw_id.isdecimal()
+            or len(raw_id.lstrip('0')) > 10):
+        print('Ticket ID must be a positive number up to 2147483647.')
+        return None
+    try:
+        ticket_id = int(raw_id.lstrip('0') or '0')
+        validate_ticket_id(ticket_id)
+        ticket = get_ticket(ticket_id)
+    except (TicketReadError, ValueError) as error:
+        print(f'\n{error}')
+        return None
+    if ticket is None:
+        print('\nNo ticket found with that ID.')
+    return ticket
+
+
+def view_ticket_notes():
+    print('\nVIEW TICKET NOTES')
+    ticket = select_ticket_for_notes()
+    if ticket is None:
+        return
+    try:
+        comments = get_ticket_comments(ticket['ticket_id'])
+    except (TicketCommentReadError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if not comments:
+        print('\nNo notes have been added to this ticket yet.')
+        return
+    print(f'\nNotes for ticket {ticket["ticket_id"]}:')
+    for comment in comments:
+        display_ticket_note(comment)
+
+
+def display_ticket_note(comment, include_id=False):
+    timestamp = comment['created_at']
+    timestamp = timestamp.strftime('%Y-%m-%d %H:%M') if timestamp is not None else '-'
+    author = comment['technician_name'] or 'Unknown technician'
+    header = f'{timestamp} | {display_value(author, "technician_name")}'
+    if include_id:
+        header = f'Comment ID: {comment["comment_id"]} | {header}'
+    print(f'\n{header}')
+    print(display_value(comment['comment_text'], 'comment_text'))
+
+
+def add_ticket_note_interactively():
+    print('\nADD TICKET NOTE')
+    ticket = select_ticket_for_notes()
+    if ticket is None:
+        return
+    print('\nSelected ticket:')
+    for label, field in (('Ticket ID', 'ticket_id'), ('Subject', 'subject'),
+                         ('Employee', 'employee_name'), ('Status', 'status')):
+        print(f'{label:<12}: {display_value(ticket[field], field)}')
+    try:
+        technicians = get_active_technicians()
+    except TechnicianReadError as error:
+        print(f'\n{error}')
+        return
+    if not technicians:
+        print('\nNo active technicians are available to write a note. No note was saved.')
+        return
+    print('\nChoose the technician writing this note:')
+    for number, technician in enumerate(technicians, start=1):
+        print(f'{number}. {display_value(technician["full_name"], "full_name")}')
+    while True:
+        selection = input('Technician number: ').strip()
+        if selection.isascii() and selection.isdecimal():
+            try:
+                number = int(selection)
+            except ValueError:
+                number = -1
+            if 1 <= number <= len(technicians):
+                technician_id = technicians[number - 1]['technician_id']
+                break
+        print('Invalid selection. Choose a listed technician number.')
+    while True:
+        try:
+            comment_text = validate_comment_text(input('Note: '))
+            break
+        except ValueError as error:
+            print(error)
+    try:
+        add_ticket_comment(ticket['ticket_id'], technician_id, comment_text)
+    except (TicketCommentCreateError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    print(f'\nNote added successfully to ticket {ticket["ticket_id"]}.')
+
+
+def delete_ticket_note_interactively():
+    print('\nDELETE TICKET NOTE')
+    ticket = select_ticket_for_notes()
+    if ticket is None:
+        return
+    ticket_id = ticket['ticket_id']
+    try:
+        comments = get_ticket_comments(ticket_id)
+    except (TicketCommentReadError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if not comments:
+        print('\nNo notes have been added to this ticket yet. There is nothing to delete.')
+        return
+    print(f'\nNotes for ticket {ticket_id}:')
+    for comment in comments:
+        display_ticket_note(comment, include_id=True)
+
+    raw_id = input('Comment ID: ').strip()
+    if (not raw_id.isascii() or not raw_id.isdecimal()
+            or len(raw_id.lstrip('0')) > 10):
+        print('Comment ID must be a positive number up to 2147483647.')
+        return
+    try:
+        comment_id = int(raw_id.lstrip('0') or '0')
+        validate_comment_id(comment_id)
+    except ValueError as error:
+        print(f'\n{error}')
+        return
+    selected = next((comment for comment in comments
+                     if comment['comment_id'] == comment_id and comment['ticket_id'] == ticket_id), None)
+    if selected is None:
+        print('\nNo note found with that Comment ID for this ticket. No note was deleted.')
+        return
+    print('\nNote to delete:')
+    display_ticket_note(selected, include_id=True)
+    try:
+        confirmation = input('Type Y or YES to permanently delete this note: ').strip()
+    except (EOFError, KeyboardInterrupt):
+        print('\nDeletion cancelled. No note was deleted.')
+        return
+    if confirmation not in ('Y', 'YES'):
+        print('\nDeletion cancelled. No note was deleted.')
+        return
+    try:
+        deleted = delete_ticket_comment(ticket_id, comment_id)
+    except (TicketCommentDeleteError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if deleted:
+        print(f'\nNote {comment_id} deleted successfully from ticket {ticket_id}.')
+    else:
+        print('\nNo note found with that Comment ID for this ticket. No note was deleted.')
+
+
+def manage_ticket_notes():
+    while True:
+        print('\nTICKET COMMENTS / NOTES')
+        print('1. View Ticket Notes')
+        print('2. Add Ticket Note')
+        print('3. Delete Ticket Note')
+        print('4. Back')
+        choice = input('Select an option: ').strip()
+        if choice == '1':
+            view_ticket_notes()
+        elif choice == '2':
+            add_ticket_note_interactively()
+        elif choice == '3':
+            delete_ticket_note_interactively()
+        elif choice == '4':
+            return
+        else:
+            print('Invalid option. Please choose a number from 1 to 4.')
+
+
 def main():
     while True:
         print('\nIT HELP DESK TICKETING SYSTEM')
@@ -421,7 +592,8 @@ def main():
         print('5. Delete Ticket')
         print('6. Manage Technicians')
         print('7. View Ticket History')
-        print('8. Exit')
+        print('8. Ticket Comments / Notes')
+        print('9. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
@@ -439,10 +611,12 @@ def main():
             elif choice == '7':
                 view_ticket_history()
             elif choice == '8':
+                manage_ticket_notes()
+            elif choice == '9':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Please choose a number from 1 to 8.')
+                print('Invalid option. Please choose a number from 1 to 9.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return
