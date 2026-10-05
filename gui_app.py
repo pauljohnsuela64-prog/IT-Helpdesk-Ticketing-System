@@ -1,4 +1,4 @@
-"""Tkinter ticket viewer and Create Ticket entry point: python gui_app.py."""
+"""Tkinter ticket viewing, creation, and search: python gui_app.py."""
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from gui_create_ticket import CreateTicketDialog
-from ticket_repository import TicketReadError, get_tickets
+from ticket_repository import TicketReadError, get_tickets, search_tickets
 
 
 # Field, heading, preferred width, minimum width.
@@ -52,6 +52,8 @@ class TicketViewer:
         self._poll_id = None
         self._create_dialog = None
         self._refresh_pending = False
+        self._active_search = ''
+        self._loading_search = ''
 
         root.title('IT Help Desk Ticketing System')
         root.geometry('1240x720')
@@ -91,7 +93,7 @@ class TicketViewer:
         content = ttk.Frame(self.root, padding=(24, 20, 24, 16), style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
-        content.rowconfigure(2, weight=1)
+        content.rowconfigure(3, weight=1)
 
         header = ttk.Frame(content, style='Helpdesk.TFrame')
         header.grid(row=0, column=0, sticky='ew', pady=(0, 22))
@@ -113,8 +115,25 @@ class TicketViewer:
                                          style='Helpdesk.TButton')
         self.refresh_button.grid(row=0, column=2, sticky='e')
 
+        search_area = ttk.Frame(content, style='Helpdesk.TFrame')
+        search_area.grid(row=2, column=0, sticky='ew', pady=(0, 12))
+        search_area.columnconfigure(1, weight=1)
+        ttk.Label(search_area, text='Search tickets', style='Helpdesk.Status.TLabel').grid(
+            row=0, column=0, sticky='w', padx=(0, 12),
+        )
+        self.search_term = tk.StringVar(master=self.root, value='')
+        self.search_entry = ttk.Entry(search_area, textvariable=self.search_term, font=('Segoe UI', 10))
+        self.search_entry.grid(row=0, column=1, sticky='ew', padx=(0, 10))
+        self.search_entry.bind('<Return>', self.perform_search)
+        self.search_button = ttk.Button(search_area, text='Search', command=self.perform_search,
+                                        style='Helpdesk.TButton')
+        self.search_button.grid(row=0, column=2, padx=(0, 8))
+        self.clear_search_button = ttk.Button(search_area, text='Clear Search', command=self.clear_search,
+                                              style='Helpdesk.TButton')
+        self.clear_search_button.grid(row=0, column=3)
+
         table = ttk.Frame(content)
-        table.grid(row=2, column=0, sticky='nsew')
+        table.grid(row=3, column=0, sticky='nsew')
         table.columnconfigure(0, weight=1)
         table.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(table, columns=tuple(column[0] for column in TICKET_COLUMNS),
@@ -133,21 +152,36 @@ class TicketViewer:
 
         self.status = tk.StringVar(master=self.root, value='Ready.')
         ttk.Label(content, textvariable=self.status, style='Helpdesk.Status.TLabel',
-                  wraplength=820, anchor='w').grid(row=3, column=0, sticky='ew', pady=(12, 0))
+                  wraplength=820, anchor='w').grid(row=4, column=0, sticky='ew', pady=(12, 0))
+
+    def perform_search(self, event=None):
+        if not self._closed:
+            self._active_search = self.search_term.get().strip()
+            self.search_term.set(self._active_search)
+            self._request_refresh()
+        return 'break'
+
+    def clear_search(self):
+        if self._closed:
+            return
+        self.search_term.set('')
+        self._active_search = ''
+        self._request_refresh()
 
     def refresh_tickets(self):
         if self._closed or self._loading:
             return
         self._loading = True
-        self.status.set('Loading tickets...')
+        self._loading_search = self._active_search
+        self.status.set('Searching tickets...' if self._active_search else 'Loading tickets...')
         self.refresh_button.state(['disabled'])
-        Thread(target=self._load_tickets, daemon=True).start()
+        Thread(target=self._load_tickets, args=(self._loading_search,), daemon=True).start()
         self._poll_id = self.root.after(100, self._check_refresh)
 
-    def _load_tickets(self):
+    def _load_tickets(self, search_term=''):
         """The worker reads data and queues results; it never calls Tkinter."""
         try:
-            tickets = get_tickets()
+            tickets = search_tickets(search_term) if search_term else get_tickets()
         except TicketReadError as error:
             self._results.put((None, str(error)))
         except Exception:
@@ -167,15 +201,17 @@ class TicketViewer:
             self._poll_id = self.root.after(100, self._check_refresh)
             return
         self._loading = False
+        if self._refresh_pending or self._loading_search != self._active_search:
+            # Discard an older result and load the most recently submitted search.
+            self._refresh_pending = False
+            self.refresh_tickets()
+            return
         self.refresh_button.state(['!disabled'])
         if error is not None:
             # Leave the last successful table visible when a refresh fails.
             self.status.set(f'Unable to load tickets. {error}')
         else:
             self._display_tickets(tickets)
-        if self._refresh_pending:
-            self._refresh_pending = False
-            self.refresh_tickets()
 
     def open_create_ticket(self):
         if self._closed:
@@ -186,6 +222,9 @@ class TicketViewer:
         self._create_dialog = CreateTicketDialog(self.root, self._refresh_after_creation)
 
     def _refresh_after_creation(self):
+        self._request_refresh()
+
+    def _request_refresh(self):
         if self._closed:
             return
         if self._loading:
@@ -205,8 +244,12 @@ class TicketViewer:
             self.tree.selection_set(selection[0])
             self.tree.focus(selection[0])
         count = len(tickets)
-        self.status.set(f'{count} ticket{"s" if count != 1 else ""} loaded.'
-                        if count else 'No tickets found.')
+        if self._active_search:
+            self.status.set(f'{count} matching ticket{"s" if count != 1 else ""} found.'
+                            if count else 'No matching tickets found.')
+        else:
+            self.status.set(f'{count} ticket{"s" if count != 1 else ""} loaded.'
+                            if count else 'No tickets found.')
 
     def close(self):
         if self._closed:

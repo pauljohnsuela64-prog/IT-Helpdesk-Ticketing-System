@@ -29,7 +29,7 @@ def search_tickets(search_term):
     pattern = '%' + search_term.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
     return _read_tickets(
         'SELECT ticket_id, employee_name, department, category, '
-        'subject, priority, status, assigned_to FROM helpdesk.tickets '
+        'subject, priority, status, assigned_to, created_at FROM helpdesk.tickets '
         "WHERE LOWER(CAST(ticket_id AS CHAR)) LIKE LOWER(%s) ESCAPE '!' "
         "OR LOWER(employee_name) LIKE LOWER(%s) ESCAPE '!' "
         "OR LOWER(department) LIKE LOWER(%s) ESCAPE '!' "

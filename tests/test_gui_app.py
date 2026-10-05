@@ -29,6 +29,10 @@ def viewer_without_window():
     viewer._poll_id = None
     viewer._create_dialog = None
     viewer._refresh_pending = False
+    viewer._active_search = ''
+    viewer._loading_search = ''
+    viewer.search_term = MagicMock()
+    viewer.search_term.get.return_value = ''
     return viewer
 
 
@@ -66,7 +70,7 @@ class RefreshTests(unittest.TestCase):
         with patch.object(gui, 'Thread') as worker:
             self.viewer.refresh_tickets()
             self.viewer.refresh_tickets()
-        worker.assert_called_once_with(target=self.viewer._load_tickets, daemon=True)
+        worker.assert_called_once_with(target=self.viewer._load_tickets, args=('',), daemon=True)
         worker.return_value.start.assert_called_once_with()
         self.viewer.status.set.assert_called_once_with('Loading tickets...')
         self.viewer.refresh_button.state.assert_called_once_with(['disabled'])
@@ -183,7 +187,8 @@ class GuiConstructionTests(unittest.TestCase):
         root = MagicMock()
         vertical, horizontal = MagicMock(), MagicMock()
         with patch.object(gui.ttk, 'Style'), patch.object(gui.ttk, 'Frame'), \
-             patch.object(gui.ttk, 'Label'), patch.object(gui.ttk, 'Button') as button, \
+             patch.object(gui.ttk, 'Label'), patch.object(gui.ttk, 'Entry') as entry, \
+             patch.object(gui.ttk, 'Button') as button, \
              patch.object(gui.ttk, 'Treeview') as tree, \
              patch.object(gui.ttk, 'Scrollbar', side_effect=[vertical, horizontal]) as scrollbar, \
              patch.object(gui.tk, 'StringVar'), \
@@ -200,10 +205,11 @@ class GuiConstructionTests(unittest.TestCase):
         headings = [item.kwargs['text'] for item in viewer.tree.heading.call_args_list]
         self.assertEqual(headings, ['Ticket ID', 'Employee', 'Department', 'Category',
                                     'Subject', 'Priority', 'Status', 'Assigned To', 'Created At'])
-        self.assertEqual(button.call_args.kwargs['text'], 'Refresh')
-        self.assertEqual(button.call_args.kwargs['command'], refresh)
-        self.assertEqual(button.call_args_list[0].kwargs['text'], 'Create Ticket')
-        self.assertEqual(button.call_args_list[0].kwargs['command'], viewer.open_create_ticket)
+        buttons = {item.kwargs['text']: item.kwargs['command'] for item in button.call_args_list}
+        self.assertEqual(buttons, {'Create Ticket': viewer.open_create_ticket, 'Refresh': refresh,
+                                   'Search': viewer.perform_search, 'Clear Search': viewer.clear_search})
+        entry.return_value.bind.assert_called_once_with('<Return>', viewer.perform_search)
+        tree.assert_called_once()
         self.assertEqual([item.kwargs['orient'] for item in scrollbar.call_args_list],
                          ['vertical', 'horizontal'])
         viewer.tree.configure.assert_called_once_with(yscrollcommand=vertical.set,
@@ -261,7 +267,7 @@ class CreateDialogIntegrationTests(unittest.TestCase):
                 viewer._results.put(result)
                 with patch.object(gui, 'Thread') as worker:
                     viewer._check_refresh()
-                worker.assert_called_once_with(target=viewer._load_tickets, daemon=True)
+                worker.assert_called_once_with(target=viewer._load_tickets, args=('',), daemon=True)
                 worker.return_value.start.assert_called_once_with()
                 self.assertTrue(viewer._loading)
                 self.assertFalse(viewer._refresh_pending)

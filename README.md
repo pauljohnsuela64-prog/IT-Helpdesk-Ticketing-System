@@ -269,7 +269,7 @@ Subject, Priority, Status, Assigned To, and Created At. It loads tickets on star
 Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
-the last successful rows. The GUI supports viewing and creating tickets; the
+the last successful rows. The GUI supports viewing, creating, and searching tickets; the
 existing CLI remains available with `python app.py`.
 
 Manual checks:
@@ -331,3 +331,49 @@ Manual checks:
    save is running, Save/Cancel must stay disabled.
 7. Verify manual Refresh, row selection, scrolling, and existing CLI menus still
    work, then run `.venv/Scripts/python.exe -m unittest discover -s tests -v`.
+
+## Search Tickets in the GUI
+
+Use the search box above the existing ticket table, then click **Search** or press
+Enter while the box is focused. The existing repository performs a case-insensitive
+substring search across Ticket ID, Employee Name, Department, Category, Subject,
+Priority, Status, and Assigned Technician. Leading/trailing spaces are trimmed,
+and numeric searches such as `3` remain valid. SQL values stay parameterized; `%`,
+`_`, and `!` are treated literally rather than as user-supplied SQL wildcards.
+
+Matching rows replace the contents of the same table, including Created At. An
+empty result clears the rows and shows `No matching tickets found.` **Clear Search**
+empties the search box and restores all tickets. Submitting a blank/whitespace-only
+search also restores all tickets.
+
+**Refresh reruns the last submitted search.** Editing the box alone does not change
+the active filter until Search or Enter is used. Clear Search removes that filter.
+Create Ticket also refreshes the active filter: a newly created matching ticket
+appears automatically; use Clear Search to see one that does not match. Database
+errors retain the last successfully loaded rows with a friendly error message.
+Reads remain in the background, and a newer search replaces a pending request so
+older results cannot overwrite it. No schema changes are required.
+
+Manual checks:
+
+1. Launch `.venv/Scripts/python.exe gui_app.py`. Search for a known Ticket ID,
+   including `3` when appropriate, and confirm numeric input is accepted.
+2. Search for known employee, department, category, subject, priority, status,
+   and technician text. Repeat a known term in uppercase/lowercase; matching
+   results should be the same. Created At should remain visible.
+3. Search `  Hardware  ` and confirm trimming. Type a term in the focused box and
+   press Enter; expect the same result as clicking Search.
+4. Search a term absent from your tickets; expect an empty table and
+   `No matching tickets found.` Then Clear Search; expect an empty box and all
+   tickets restored. A whitespace-only search should also restore all tickets.
+5. Search a known category, then Refresh; the filter should stay active. Edit
+   the box without submitting and Refresh again; the previous filter should still
+   apply. Submit the edited term to apply it.
+6. Quickly submit different searches or Clear Search during a load. The final
+   table should follow the latest request without duplicate rows or a frozen GUI.
+7. Create a test ticket matching the active search; it should appear automatically
+   after saving. Create one that does not match; Clear Search should reveal it.
+8. With MySQL temporarily unavailable, Search should show a friendly error and
+   preserve previous rows. Restore MySQL, then Search, Refresh, or Clear Search;
+   the GUI should recover. Check row selection, scrolling, and the existing CLI.
+9. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`.
