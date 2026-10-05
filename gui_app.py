@@ -1,10 +1,11 @@
-"""Read-only Tkinter ticket viewer: python gui_app.py."""
+"""Tkinter ticket viewer and Create Ticket entry point: python gui_app.py."""
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
 import tkinter as tk
 from tkinter import ttk
 
+from gui_create_ticket import CreateTicketDialog
 from ticket_repository import TicketReadError, get_tickets
 
 
@@ -49,6 +50,8 @@ class TicketViewer:
         self._loading = False
         self._closed = False
         self._poll_id = None
+        self._create_dialog = None
+        self._refresh_pending = False
 
         root.title('IT Help Desk Ticketing System')
         root.geometry('1240x720')
@@ -103,9 +106,12 @@ class TicketViewer:
         ttk.Label(toolbar, text='Tickets', style='Helpdesk.Section.TLabel').grid(
             row=0, column=0, sticky='w',
         )
+        self.create_button = ttk.Button(toolbar, text='Create Ticket', command=self.open_create_ticket,
+                                        style='Helpdesk.TButton')
+        self.create_button.grid(row=0, column=1, sticky='e', padx=(0, 10))
         self.refresh_button = ttk.Button(toolbar, text='Refresh', command=self.refresh_tickets,
                                          style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=1, sticky='e')
+        self.refresh_button.grid(row=0, column=2, sticky='e')
 
         table = ttk.Frame(content)
         table.grid(row=2, column=0, sticky='nsew')
@@ -165,8 +171,27 @@ class TicketViewer:
         if error is not None:
             # Leave the last successful table visible when a refresh fails.
             self.status.set(f'Unable to load tickets. {error}')
+        else:
+            self._display_tickets(tickets)
+        if self._refresh_pending:
+            self._refresh_pending = False
+            self.refresh_tickets()
+
+    def open_create_ticket(self):
+        if self._closed:
             return
-        self._display_tickets(tickets)
+        if self._create_dialog is not None and self._create_dialog.is_open:
+            self._create_dialog.focus()
+            return
+        self._create_dialog = CreateTicketDialog(self.root, self._refresh_after_creation)
+
+    def _refresh_after_creation(self):
+        if self._closed:
+            return
+        if self._loading:
+            self._refresh_pending = True
+        else:
+            self.refresh_tickets()
 
     def _display_tickets(self, tickets):
         selection = self.tree.selection()
@@ -184,6 +209,13 @@ class TicketViewer:
                         if count else 'No tickets found.')
 
     def close(self):
+        if self._closed:
+            return
+        if self._create_dialog is not None and self._create_dialog.is_open:
+            if self._create_dialog.is_saving:
+                self._create_dialog.focus()
+                return
+            self._create_dialog.cancel()
         self._closed = True
         if self._poll_id is not None:
             self.root.after_cancel(self._poll_id)

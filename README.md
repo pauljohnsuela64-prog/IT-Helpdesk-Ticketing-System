@@ -269,8 +269,8 @@ Subject, Priority, Status, Assigned To, and Created At. It loads tickets on star
 Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
-the last successful rows. The GUI is read-only; the existing CLI remains available
-with `python app.py`.
+the last successful rows. The GUI supports viewing and creating tickets; the
+existing CLI remains available with `python app.py`.
 
 Manual checks:
 
@@ -289,3 +289,45 @@ Manual checks:
    ```bash
    .venv/Scripts/python.exe -m unittest discover -s tests -v
    ```
+
+## Create Ticket in the GUI
+
+Click **Create Ticket** next to Refresh. The dialog contains Employee Name,
+Department, Category, Subject, a multiline Description, and Priority. Category
+and Priority use readonly dropdowns with the same choices as the CLI; Priority
+defaults to Medium. The shared validation trims text and enforces the existing
+name, length, and database-capacity rules. Validation and database errors keep
+the form open with a friendly message and preserve entered values.
+
+Save uses the existing repository, including its generated defaults and automatic
+Ticket Created history entry. A successful save closes the form, displays the new
+Ticket ID, and automatically refreshes the main table. If a table load is already
+running, another refresh follows it so the new ticket appears. Cancel, Escape, or
+the dialog's close button discards an unsaved form. Only one Create Ticket dialog
+opens at a time. During saving, inputs and Save/Cancel are disabled, and closing
+waits for the save result to prevent duplicate or uncertain submissions. No schema
+change or additional dependency is required.
+
+Manual checks:
+
+1. Launch `.venv/Scripts/python.exe gui_app.py`, click Create Ticket, and check all
+   six fields, readonly dropdowns, multiline Description, and Medium priority.
+2. Save a blank form. Try Employee Name `3`, Department `!!!`, Subject `ab`, and
+   Description `1234`, correcting each earlier invalid field before the next check.
+   Each invalid save should show a friendly message, keep values, and leave the
+   form open. Overlong names or subjects should also be rejected.
+3. Create a test ticket with Employee Name `  Alice Reyes  `, Department `  IT  `,
+   Category Hardware, Subject `  PC 3  `, a description containing two lines, and
+   Priority Medium. Save once; expect a message containing the new Ticket ID, the
+   dialog to close, and the ticket to appear automatically in the table.
+4. Use the existing CLI to inspect that Ticket ID. Verify trimmed text, multiline
+   description, Open status, generated timestamps, and one Ticket Created history
+   entry. Check other priority/category choices using another disposable test ticket.
+5. Enter data in a new form and Cancel. Reopen and close with Escape or the window
+   close button. None of those actions should save a ticket. Repeated requests to
+   open Create Ticket should reuse the existing dialog.
+6. With MySQL temporarily unavailable, Save a valid form. Expect a friendly error
+   and retained inputs. Restore MySQL and retry; expect normal success. While a
+   save is running, Save/Cancel must stay disabled.
+7. Verify manual Refresh, row selection, scrolling, and existing CLI menus still
+   work, then run `.venv/Scripts/python.exe -m unittest discover -s tests -v`.

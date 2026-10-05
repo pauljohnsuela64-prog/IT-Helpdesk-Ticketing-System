@@ -27,6 +27,8 @@ def viewer_without_window():
     viewer._loading = False
     viewer._closed = False
     viewer._poll_id = None
+    viewer._create_dialog = None
+    viewer._refresh_pending = False
     return viewer
 
 
@@ -200,6 +202,8 @@ class GuiConstructionTests(unittest.TestCase):
                                     'Subject', 'Priority', 'Status', 'Assigned To', 'Created At'])
         self.assertEqual(button.call_args.kwargs['text'], 'Refresh')
         self.assertEqual(button.call_args.kwargs['command'], refresh)
+        self.assertEqual(button.call_args_list[0].kwargs['text'], 'Create Ticket')
+        self.assertEqual(button.call_args_list[0].kwargs['command'], viewer.open_create_ticket)
         self.assertEqual([item.kwargs['orient'] for item in scrollbar.call_args_list],
                          ['vertical', 'horizontal'])
         viewer.tree.configure.assert_called_once_with(yscrollcommand=vertical.set,
@@ -221,6 +225,71 @@ class TicketListRepositoryTests(unittest.TestCase):
         self.assertIn('assigned_to, created_at FROM helpdesk.tickets ORDER BY ticket_id', query)
         self.assertIsNone(parameters)
         connection.commit.assert_not_called()
+
+
+class CreateDialogIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.viewer = viewer_without_window()
+
+    def test_repeated_open_focuses_same_dialog(self):
+        with patch.object(gui, 'CreateTicketDialog') as create:
+            create.return_value.is_open = True
+            self.viewer.open_create_ticket()
+            self.viewer.open_create_ticket()
+        create.assert_called_once_with(self.viewer.root, self.viewer._refresh_after_creation)
+        create.return_value.focus.assert_called_once_with()
+
+    def test_closed_form_can_be_opened_again(self):
+        with patch.object(gui, 'CreateTicketDialog') as create:
+            self.viewer.open_create_ticket()
+            create.return_value.is_open = False
+            self.viewer.open_create_ticket()
+        self.assertEqual(create.call_count, 2)
+
+    def test_success_requests_immediate_refresh_when_idle(self):
+        with patch.object(self.viewer, 'refresh_tickets') as refresh:
+            self.viewer._refresh_after_creation()
+        refresh.assert_called_once_with()
+
+    def test_creation_during_load_requests_followup_refresh_even_after_read_error(self):
+        for result in (([ticket()], None), (None, 'Check MySQL.')):
+            with self.subTest(error=result[1]):
+                viewer = viewer_without_window()
+                viewer._loading = True
+                viewer._refresh_after_creation()
+                self.assertTrue(viewer._refresh_pending)
+                viewer._results.put(result)
+                with patch.object(gui, 'Thread') as worker:
+                    viewer._check_refresh()
+                worker.assert_called_once_with(target=viewer._load_tickets, daemon=True)
+                worker.return_value.start.assert_called_once_with()
+                self.assertTrue(viewer._loading)
+                self.assertFalse(viewer._refresh_pending)
+
+    def test_main_close_cancels_unsaved_form(self):
+        dialog = MagicMock(is_open=True, is_saving=False)
+        self.viewer._create_dialog = dialog
+        self.viewer.close()
+        dialog.cancel.assert_called_once_with()
+        self.viewer.root.destroy.assert_called_once_with()
+
+    def test_main_close_waits_for_save_result(self):
+        dialog = MagicMock(is_open=True, is_saving=True)
+        self.viewer._create_dialog = dialog
+        self.viewer.close()
+        dialog.focus.assert_called_once_with()
+        dialog.cancel.assert_not_called()
+        self.viewer.root.destroy.assert_not_called()
+        self.assertFalse(self.viewer._closed)
+
+    def test_closed_viewer_ignores_open_and_creation_callback(self):
+        self.viewer._closed = True
+        with patch.object(gui, 'CreateTicketDialog') as create, \
+             patch.object(self.viewer, 'refresh_tickets') as refresh:
+            self.viewer.open_create_ticket()
+            self.viewer._refresh_after_creation()
+        create.assert_not_called()
+        refresh.assert_not_called()
 
 
 if __name__ == '__main__':
