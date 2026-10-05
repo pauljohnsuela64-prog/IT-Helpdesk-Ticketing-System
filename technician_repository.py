@@ -2,6 +2,7 @@
 import mysql.connector
 
 from database import get_connection
+from input_validation import validate_text
 
 
 CREATE_TECHNICIANS_SQL = (
@@ -106,12 +107,7 @@ def add_technician(full_name, email):
     fields = {'Full name': (full_name, 100), 'Email': (email, 150)}
     validated = []
     for label, (value, limit) in fields.items():
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f'{label} is required.')
-        value = value.strip()
-        if len(value) > limit:
-            raise ValueError(f'{label} must be at most {limit} characters.')
-        validated.append(value)
+        validated.append(validate_text(value, label, limit))
 
     try:
         with get_connection() as connection:

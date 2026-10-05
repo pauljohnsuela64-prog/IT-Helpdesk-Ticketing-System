@@ -2,6 +2,7 @@
 import mysql.connector
 
 from database import get_connection
+from input_validation import validate_text
 from technician_repository import get_active_technician, validate_technician_id
 
 
@@ -162,13 +163,7 @@ def update_ticket(ticket_id, changes, *, technician_id=None):
                 raise ValueError('Select an active technician instead of typing a name.')
             validated[field] = None
             continue
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f'{field.replace("_", " ").capitalize()} is required.')
-        value = value.strip()
-        if field in limits and len(value) > limits[field]:
-            raise ValueError(f'{field} must be at most {limits[field]} characters.')
-        if field == 'description' and len(value.encode('utf-8')) > 65535:
-            raise ValueError('Description is too long (maximum 65535 UTF-8 bytes).')
+        value = validate_text(value, field.replace('_', ' ').capitalize(), limits.get(field))
         choices = {'category': CATEGORIES, 'priority': PRIORITIES, 'status': STATUSES}
         if field in choices and value not in choices[field]:
             raise ValueError(f'{field.capitalize()} must be one of: ' + ', '.join(choices[field]))
@@ -239,18 +234,15 @@ class TicketCreateError(Exception):
 def create_ticket(employee_name, department, category, subject, description, priority):
     """Validate and save one ticket; MySQL supplies IDs and default values."""
     fields = {
-        'Employee name': (employee_name.strip(), 100),
-        'Department': (department.strip(), 100),
-        'Subject': (subject.strip(), 150),
-        'Description': (description.strip(), None),
+        'Employee name': (employee_name, 100),
+        'Department': (department, 100),
+        'Subject': (subject, 150),
+        'Description': (description, None),
     }
-    for label, (value, limit) in fields.items():
-        if not value:
-            raise ValueError(f'{label} is required.')
-        if limit is not None and len(value) > limit:
-            raise ValueError(f'{label} must be at most {limit} characters.')
-    if len(fields['Description'][0].encode('utf-8')) > 65535:
-        raise ValueError('Description is too long (maximum 65535 UTF-8 bytes).')
+    validated = {
+        label: validate_text(value, label, limit)
+        for label, (value, limit) in fields.items()
+    }
     if category not in CATEGORIES:
         raise ValueError('Choose one of the listed categories.')
     if priority not in PRIORITIES:
@@ -264,8 +256,8 @@ def create_ticket(employee_name, department, category, subject, description, pri
                         'INSERT INTO helpdesk.tickets '
                         '(employee_name, department, category, subject, description, priority) '
                         'VALUES (%s, %s, %s, %s, %s, %s)',
-                        (fields['Employee name'][0], fields['Department'][0], category,
-                         fields['Subject'][0], fields['Description'][0], priority),
+                        (validated['Employee name'], validated['Department'], category,
+                         validated['Subject'], validated['Description'], priority),
                     )
                     ticket_id = cursor.lastrowid
                 connection.commit()

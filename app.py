@@ -1,4 +1,5 @@
 """Command-line entry point for the IT Help Desk Ticketing System."""
+from input_validation import validate_text
 from ticket_repository import (
     CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
     STATUSES, TicketDeleteError, TicketUpdateError, create_ticket, delete_ticket,
@@ -77,15 +78,11 @@ def search_tickets_interactively():
 
 def prompt_required(label, max_length=None):
     while True:
-        value = input(f'{label}: ').strip()
-        if not value:
-            print(f'{label} is required.')
-        elif max_length is not None and len(value) > max_length:
-            print(f'{label} must be at most {max_length} characters.')
-        elif label == 'Description' and len(value.encode('utf-8')) > 65535:
-            print('Description is too long (maximum 65535 UTF-8 bytes).')
-        else:
-            return value
+        value = input(f'{label}: ')
+        try:
+            return validate_text(value, label, max_length)
+        except ValueError as error:
+            print(error)
 
 
 def prompt_choice(label, choices):
@@ -138,12 +135,11 @@ def prompt_edit(label, field, current, max_length, choices):
                 if value.casefold() == choice.casefold():
                     return choice
             print('Enter one of: ' + ', '.join(choices))
-        elif max_length is not None and len(value) > max_length:
-            print(f'{label} must be at most {max_length} characters.')
-        elif field == 'description' and len(value.encode('utf-8')) > 65535:
-            print('Description is too long (maximum 65535 UTF-8 bytes).')
         else:
-            return value
+            try:
+                return validate_text(value, label, max_length)
+            except ValueError as error:
+                print(error)
 
 
 def prompt_assigned_technician(current):
