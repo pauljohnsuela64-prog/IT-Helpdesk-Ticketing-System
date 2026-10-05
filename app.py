@@ -4,6 +4,9 @@ from ticket_repository import (
     STATUSES, TicketDeleteError, TicketUpdateError, create_ticket, delete_ticket,
     get_ticket, get_tickets, search_tickets, update_ticket, validate_ticket_id,
 )
+from technician_repository import (
+    TechnicianCreateError, TechnicianReadError, add_technician, get_technicians,
+)
 
 
 TICKET_FIELDS = (
@@ -231,6 +234,52 @@ def delete_ticket_interactively():
         print('\nNo ticket found with that ID. No ticket was deleted.')
 
 
+def view_technicians():
+    try:
+        technicians = get_technicians()
+    except TechnicianReadError as error:
+        print(f'\n{error}')
+        return
+    if not technicians:
+        print('\nNo technicians found yet. Choose Add Technician to add one.')
+        return
+    for technician in technicians:
+        print('\n' + '-' * 48)
+        for label, field in (('Technician ID', 'technician_id'), ('Full Name', 'full_name'),
+                             ('Email', 'email'), ('Status', 'status')):
+            print(f'{label:<13}: {display_value(technician[field], field)}')
+    print(f'\nTotal technicians: {len(technicians)}')
+
+
+def add_technician_interactively():
+    print('\nADD TECHNICIAN')
+    full_name = prompt_required('Full name', 100)
+    email = prompt_required('Email', 150)
+    try:
+        technician_id = add_technician(full_name, email)
+    except (TechnicianCreateError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    print(f'\nTechnician added successfully. New technician ID: {technician_id}')
+
+
+def manage_technicians():
+    while True:
+        print('\nMANAGE TECHNICIANS')
+        print('1. View Technicians')
+        print('2. Add Technician')
+        print('3. Back')
+        choice = input('Select an option: ').strip()
+        if choice == '1':
+            view_technicians()
+        elif choice == '2':
+            add_technician_interactively()
+        elif choice == '3':
+            return
+        else:
+            print('Invalid option. Please choose a number from 1 to 3.')
+
+
 def main():
     while True:
         print('\nIT HELP DESK TICKETING SYSTEM')
@@ -239,7 +288,8 @@ def main():
         print('3. Search Tickets')
         print('4. Update Ticket')
         print('5. Delete Ticket')
-        print('6. Exit')
+        print('6. Manage Technicians')
+        print('7. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
@@ -253,10 +303,12 @@ def main():
             elif choice == '5':
                 delete_ticket_interactively()
             elif choice == '6':
+                manage_technicians()
+            elif choice == '7':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Please choose a number from 1 to 6.')
+                print('Invalid option. Please choose a number from 1 to 7.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return

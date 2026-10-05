@@ -24,3 +24,44 @@ A Python + MySQL based IT Help Desk Ticketing System.
 - [ ] Dashboard
 - [ ] User authentication
 - [ ] Reports
+
+## Technician Management
+
+From the project directory in Git Bash, use the existing `.env` connection settings
+with `DB_NAME=helpdesk` and run this setup command once:
+
+```bash
+python setup_technicians.py
+```
+
+The database user needs CREATE permission on `helpdesk` for setup. This command
+creates only `helpdesk.technicians`; it leaves existing tables unchanged and is
+safe to rerun. It uses MySQL-generated IDs and timestamps, defaults new technicians
+to `Active`, and enforces unique email addresses without regard to letter case.
+Normal CLI use requires SELECT and INSERT permission on the technician table.
+
+```bash
+python app.py
+```
+
+Choose **6. Manage Technicians**, then **1. View Technicians** or **2. Add Technician**.
+Choose **3. Back** to return to the main menu, or **7. Exit** from the main menu.
+Full names and emails are required, with limits of 100 and 150 characters.
+
+Manual checks:
+
+1. View Technicians before adding anyone: expect a friendly empty-list message.
+2. Add `Alex Reyes` with `alex.reyes@example.com`: expect the new technician ID.
+3. View Technicians: confirm the ID, full name, email, and `Active` status.
+4. Add the same email again, including with different letter case: expect a
+   friendly duplicate-email message and no additional technician.
+5. Try blank or whitespace-only names/emails and inputs exceeding their limits:
+   expect a validation message and another prompt.
+6. Enter an invalid submenu option, then Back: confirm friendly handling and return
+   to the main menu. Verify the existing ticket options still work as before.
+
+Run automated tests without connecting to a live database:
+
+```bash
+python -m unittest discover -s tests -v
+```

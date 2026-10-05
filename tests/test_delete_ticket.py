@@ -169,9 +169,9 @@ class CliTests(unittest.TestCase):
         self.assertIn('Unable to delete ticket', output)
         self.assertNotIn('successfully', output)
 
-    def test_menu_routes_all_features_and_exits_with_six(self):
+    def test_menu_routes_all_ticket_features_and_exits_with_seven(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['1', '2', '3', '4', '5', '6']), \
+        with patch('builtins.input', side_effect=['1', '2', '3', '4', '5', '7']), \
              patch.object(app, 'view_tickets') as view, \
              patch.object(app, 'create_ticket_interactively') as create, \
              patch.object(app, 'search_tickets_interactively') as search, \
@@ -181,12 +181,12 @@ class CliTests(unittest.TestCase):
         for action in (view, create, search, update, delete):
             action.assert_called_once_with()
         for option in ('1. View Tickets', '2. Create Ticket', '3. Search Tickets',
-                       '4. Update Ticket', '5. Delete Ticket', '6. Exit'):
+                       '4. Update Ticket', '5. Delete Ticket', '6. Manage Technicians', '7. Exit'):
             self.assertIn(option, output.getvalue())
 
     def test_cancel_returns_to_menu(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['5', '7', 'N', '6']), \
+        with patch('builtins.input', side_effect=['5', '7', 'N', '7']), \
              patch.object(app, 'get_ticket', return_value=ticket()), \
              patch.object(app, 'delete_ticket') as delete, redirect_stdout(output):
             app.main()
