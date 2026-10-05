@@ -196,7 +196,7 @@ class CliTests(unittest.TestCase):
 
     def test_cancel_returns_to_submenu_and_back_returns_to_main_menu(self):
         output = io.StringIO()
-        with patch('builtins.input', side_effect=['6', '3', '12', 'Inactive', 'n', '4', '7']), \
+        with patch('builtins.input', side_effect=['6', '3', '12', 'Inactive', 'n', '4', '8']), \
              patch.object(app, 'get_technicians', return_value=[technician()]), \
              patch.object(app, 'get_technician', return_value=technician()), \
              patch.object(app, 'update_technician_status') as save, redirect_stdout(output):

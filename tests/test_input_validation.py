@@ -33,6 +33,8 @@ class RepositoryTests(unittest.TestCase):
         self.cursor.fetchone.return_value = current_ticket()
         self.ticket_connect = patch.object(tickets, 'get_connection', return_value=self.connection).start()
         self.technician_connect = patch.object(technicians, 'get_connection', return_value=self.connection).start()
+        patch.object(tickets, 'record_ticket_created').start()
+        patch.object(tickets, 'record_ticket_updated').start()
         self.addCleanup(patch.stopall)
 
     def test_invalid_ticket_values_fail_for_create_and_update_before_connection(self):

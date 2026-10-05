@@ -1,5 +1,6 @@
 """Command-line entry point for the IT Help Desk Ticketing System."""
 from input_validation import validate_text
+from ticket_history_repository import TicketHistoryReadError, get_ticket_history
 from ticket_repository import (
     CATEGORIES, PRIORITIES, TicketCreateError, TicketReadError,
     STATUSES, TicketDeleteError, TicketUpdateError, create_ticket, delete_ticket,
@@ -261,6 +262,7 @@ def delete_ticket_interactively():
 
     print('\nTicket to delete:')
     display_ticket_details(ticket)
+    print('Deleting this ticket also removes its activity history.')
     try:
         confirmation = input('Type Y or YES to permanently delete this ticket: ').strip()
     except (EOFError, KeyboardInterrupt):
@@ -382,6 +384,33 @@ def manage_technicians():
             print('Invalid option. Please choose a number from 1 to 4.')
 
 
+def view_ticket_history():
+    print('\nVIEW TICKET HISTORY')
+    raw_id = input('Ticket ID: ').strip()
+    if not raw_id.isascii() or not raw_id.isdecimal():
+        print('Ticket ID must be a positive number up to 2147483647.')
+        return
+    try:
+        ticket_id = int(raw_id)
+        validate_ticket_id(ticket_id)
+        if get_ticket(ticket_id) is None:
+            print('\nNo ticket found with that ID.')
+            return
+        history = get_ticket_history(ticket_id)
+    except (TicketReadError, TicketHistoryReadError, ValueError) as error:
+        print(f'\n{error}')
+        return
+    if not history:
+        print('\nNo activity recorded for this ticket yet.')
+        return
+    print(f'\nHistory for ticket {ticket_id}:')
+    for activity in history:
+        timestamp = activity['created_at']
+        timestamp = timestamp.strftime('%Y-%m-%d %H:%M') if timestamp is not None else '-'
+        print(f'{timestamp} | {display_value(activity["action"], "action")} | '
+              f'{display_value(activity["details"], "details")}')
+
+
 def main():
     while True:
         print('\nIT HELP DESK TICKETING SYSTEM')
@@ -391,7 +420,8 @@ def main():
         print('4. Update Ticket')
         print('5. Delete Ticket')
         print('6. Manage Technicians')
-        print('7. Exit')
+        print('7. View Ticket History')
+        print('8. Exit')
         try:
             choice = input('Select an option: ').strip()
             if choice == '1':
@@ -407,10 +437,12 @@ def main():
             elif choice == '6':
                 manage_technicians()
             elif choice == '7':
+                view_ticket_history()
+            elif choice == '8':
                 print('Goodbye!')
                 return
             else:
-                print('Invalid option. Please choose a number from 1 to 7.')
+                print('Invalid option. Please choose a number from 1 to 8.')
         except (EOFError, KeyboardInterrupt):
             print('\nGoodbye!')
             return

@@ -4,6 +4,7 @@ import mysql.connector
 from database import get_connection
 from input_validation import validate_text
 from technician_repository import get_active_technician, validate_technician_id
+from ticket_history_repository import SETUP_MESSAGE, record_ticket_created, record_ticket_updated
 
 
 class TicketReadError(Exception):
@@ -207,6 +208,7 @@ def update_ticket(ticket_id, changes, *, technician_id=None):
                         tuple(values[field] for field in EDITABLE_FIELDS)
                         + (entering_resolved, resolved_at, ticket_id),
                     )
+                    record_ticket_updated(cursor, ticket_id, current, values)
                 connection.commit()
                 return True
             except (mysql.connector.Error, TicketUpdateError):
@@ -223,7 +225,8 @@ def update_ticket(ticket_id, changes, *, technician_id=None):
     except mysql.connector.Error as error:
         raise TicketUpdateError(
             f'Ticket update could not be confirmed (MySQL error code: {error.errno}). '
-            'Check your connection and use View Tickets before retrying.'
+            'Check your connection and use View Tickets before retrying. '
+            + (SETUP_MESSAGE if error.errno == 1146 else '')
         ) from None
 
 
@@ -260,6 +263,7 @@ def create_ticket(employee_name, department, category, subject, description, pri
                          validated['Subject'], validated['Description'], priority),
                     )
                     ticket_id = cursor.lastrowid
+                    record_ticket_created(cursor, ticket_id)
                 connection.commit()
                 return ticket_id
             except mysql.connector.Error:
@@ -276,5 +280,6 @@ def create_ticket(employee_name, department, category, subject, description, pri
     except mysql.connector.Error as error:
         raise TicketCreateError(
             f'Ticket creation could not be confirmed (MySQL error code: {error.errno}). '
-            'Check your connection and use View Tickets before retrying.'
+            'Check your connection and use View Tickets before retrying. '
+            + (SETUP_MESSAGE if error.errno == 1146 else '')
         ) from None

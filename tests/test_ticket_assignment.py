@@ -62,6 +62,7 @@ class TicketRepositoryTests(unittest.TestCase):
         self.connection.__enter__.return_value = self.connection
         self.cursor = self.connection.cursor.return_value.__enter__.return_value
         self.connect = patch.object(tickets, 'get_connection', return_value=self.connection).start()
+        patch.object(tickets, 'record_ticket_updated').start()
         self.addCleanup(patch.stopall)
 
     def select_for_save(self, current, technician=ACTIVE_TECHNICIANS[1]):
