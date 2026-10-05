@@ -249,3 +249,43 @@ Delete Ticket Note checks (use disposable notes):
    no deletion. A ticket with no notes should return without asking for a Comment ID.
 5. Try a note from an inactive technician; it should still display and be deletable
    after confirmation. Check **4. Back**, existing View/Add options, and **9. Exit**.
+
+## GUI Foundation / View Tickets
+
+From the project directory in Git Bash, launch the separate Tkinter application:
+
+```bash
+.venv/Scripts/python.exe gui_app.py
+```
+
+With your Python environment already active, `python gui_app.py` also works.
+Tkinter and ttk are included with the project's Windows Python installation;
+no additional GUI package or database migration is needed. The viewer uses the
+existing `.env` settings and accepts only `DB_NAME=helpdesk` through the shared
+database connection function.
+
+The resizable 1240 × 720 window displays Ticket ID, Employee, Department, Category,
+Subject, Priority, Status, Assigned To, and Created At. It loads tickets on startup.
+Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
+one row to select it. Database reads run in a background thread so the window
+remains responsive. Failed refreshes show a friendly status message and retain
+the last successful rows. The GUI is read-only; the existing CLI remains available
+with `python app.py`.
+
+Manual checks:
+
+1. Launch the GUI and check its title, header, columns, and loaded-ticket message.
+2. Resize the window, scroll in both directions, and select a single ticket row.
+3. Make a test ticket change through the existing CLI, then click Refresh in the
+   GUI. Verify that the table updates without restarting and rows are not duplicated.
+4. If the database contains no tickets, expect `No tickets found.` Do not delete
+   existing tickets merely to test the empty state; it is covered automatically.
+5. With MySQL temporarily unavailable, Refresh should show `Unable to load tickets.`
+   with connection guidance, retain existing rows, and remain responsive. Restore
+   MySQL and click Refresh again; loading should recover.
+6. Close the window, then check the existing CLI still works. Run the automated
+   tests, which require neither an interactive GUI nor a live database:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -v
+   ```

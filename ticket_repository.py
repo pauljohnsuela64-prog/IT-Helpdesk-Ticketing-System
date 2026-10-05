@@ -15,7 +15,7 @@ def get_tickets():
     """Return ticket dictionaries from the helpdesk database only."""
     return _read_tickets(
         'SELECT ticket_id, employee_name, department, category, '
-        'subject, priority, status, assigned_to '
+        'subject, priority, status, assigned_to, created_at '
         'FROM helpdesk.tickets ORDER BY ticket_id'
     )
 
