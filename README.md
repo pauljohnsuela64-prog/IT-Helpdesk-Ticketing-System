@@ -269,7 +269,7 @@ Subject, Priority, Status, Assigned To, and Created At. It loads tickets on star
 Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
-the last successful rows. The GUI supports viewing, creating, and searching tickets; the
+the last successful rows. The GUI supports viewing, creating, searching, and updating tickets; the
 existing CLI remains available with `python app.py`.
 
 Manual checks:
@@ -377,3 +377,75 @@ Manual checks:
    preserve previous rows. Restore MySQL, then Search, Refresh, or Clear Search;
    the GUI should recover. Check row selection, scrolling, and the existing CLI.
 9. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`.
+
+## Update Ticket in the GUI
+
+Select one row in the existing table, then click **Update Ticket** beside Create
+Ticket and Refresh. With no selection, a friendly message asks you to select a
+ticket. The dialog loads fresh, complete ticket details and Active technicians
+through the existing repositories in a background thread. Ticket ID and created,
+updated, and resolved timestamps are displayed as information rather than inputs.
+
+Edit Employee Name, Department, Category, Subject, multiline Description, Priority,
+Status, and Assigned Technician. Category, Priority, Status, and technician choices
+are readonly dropdowns. Text uses the shared CLI/repository validation and is
+trimmed before saving; blank or invalid values keep the form open with feedback.
+Leaving prefilled values untouched keeps them. Technician choices show names and
+IDs to distinguish duplicate names. **Keep current** preserves the existing name,
+including an inactive or legacy assignment; **Unassign technician** removes it.
+Only Active technicians are offered for new assignments. If none are available,
+other edits, keeping the assignment, and unassigning remain possible.
+
+**Save Changes** asks for confirmation before using the existing update transaction.
+Assigning an active technician changes an Open ticket to Assigned when its requested
+status is still Open; other statuses and explicit status changes are preserved.
+Entering Resolved sets the resolution timestamp, remaining Resolved preserves it,
+and leaving Resolved clears it, exactly as in the CLI. Automatic history logging
+remains in that transaction, and unchanged values generate no activity. The selected
+technician's Active status is rechecked at save time.
+
+Success closes the dialog, shows the Ticket ID, and refreshes the existing table.
+**The last submitted search filter stays active.** A ticket that no longer matches
+disappears from the filtered results; Clear Search restores the full list. A save
+during a table load queues another refresh. Database errors retain form values and
+allow retrying. Cancel, Escape, and the close button discard unsaved edits; during a
+save, controls are disabled and closing waits for the result. One editing/creation
+dialog is open at a time. No database migration or extra dependency is required.
+
+Manual checks (use disposable test tickets):
+
+1. In Git Bash, run `.venv/Scripts/python.exe gui_app.py`. Click Update Ticket with
+   no selected row; expect a friendly message and no dialog or database update.
+2. Select a ticket and click Update Ticket. Verify that all eight editable fields,
+   the full description, current assignment, and read-only timestamps are shown.
+   Category, Priority, Status, and Assigned Technician must be readonly dropdowns.
+3. Save unchanged values; expect `No changes made.` Try Employee Name `3`, Department
+   `!!!`, Subject `ab`, Description `1234`, and blank/whitespace text, correcting each
+   earlier invalid field before checking the next. No invalid save should occur.
+4. Edit Subject to `  Error 404  ` and Description to a valid multiline value. Click
+   Save Changes, decline confirmation, and verify the form stays open and nothing
+   changed. Save again and confirm; expect success, a closed dialog, and refreshed
+   rows. Reopen to check trimming and the preserved multiline description.
+5. On an Open test ticket, select an Active technician and confirm. Verify the name
+   and Assigned status. On In Progress, Resolved, and Closed test tickets, change
+   the technician and verify those statuses remain unchanged. Explicitly choose
+   In Progress on an Open ticket while assigning; In Progress must be preserved.
+6. Choose Keep current, edit another field, and verify the assignment remains.
+   Choose Unassign technician and verify the assignment clears without changing
+   status. Existing inactive assignments must remain visible in Keep current while
+   inactive technicians are absent from the new-assignment choices. With no Active
+   technicians, expect friendly feedback and working keep/unassign/other edits.
+7. Change a test ticket to Resolved, then use the CLI to inspect its resolved_at.
+   Edit its priority while keeping Resolved; the timestamp must stay the same.
+   Reopen it as Open or In Progress; resolved_at must clear. Use CLI option 7 to
+   check history for status, priority, assignment/reassignment/unassignment, and
+   information updates. Unchanged or cancelled edits must create no activity.
+8. Search for a category, update a matching test ticket to another category, and
+   confirm the filter stays active and the ticket disappears. Clear Search to see
+   it again. Check Create Ticket, Refresh, scrolling, selection, and CLI menus.
+9. Open a test ticket, temporarily make MySQL unavailable, and confirm a valid
+   update. Expect a friendly error and retained values. Restore MySQL and retry.
+   A ticket deleted or technician made Inactive through the CLI after opening the
+   dialog must produce friendly save feedback rather than a crash.
+10. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Tests use mocks
+    and require neither an interactive GUI session nor a live database.

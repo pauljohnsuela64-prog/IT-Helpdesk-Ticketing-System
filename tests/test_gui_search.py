@@ -30,6 +30,7 @@ def viewer_without_window():
     viewer._closed = False
     viewer._poll_id = None
     viewer._create_dialog = None
+    viewer._update_dialog = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._loading_search = ''
