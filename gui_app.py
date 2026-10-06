@@ -1,4 +1,4 @@
-"""Tkinter ticket viewing, creation, search, and updates: python gui_app.py."""
+"""Tkinter ticket viewing, creation, search, updates, and deletion: python gui_app.py."""
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
@@ -6,8 +6,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from gui_create_ticket import CreateTicketDialog
+from gui_delete_ticket import DeleteTicketDialog
 from gui_update_ticket import UpdateTicketDialog
-from ticket_repository import TicketReadError, get_tickets, search_tickets
+from ticket_repository import TicketReadError, get_tickets, search_tickets, validate_ticket_id
 
 
 # Field, heading, preferred width, minimum width.
@@ -53,6 +54,7 @@ class TicketViewer:
         self._poll_id = None
         self._create_dialog = None
         self._update_dialog = None
+        self._delete_dialog = None
         self._refresh_pending = False
         self._active_search = ''
         self._loading_search = ''
@@ -116,9 +118,12 @@ class TicketViewer:
         self.update_button = ttk.Button(toolbar, text='Update Ticket', command=self.open_update_ticket,
                                         style='Helpdesk.TButton')
         self.update_button.grid(row=0, column=2, sticky='e', padx=(0, 10))
+        self.delete_button = ttk.Button(toolbar, text='Delete Ticket', command=self.open_delete_ticket,
+                                        style='Helpdesk.TButton')
+        self.delete_button.grid(row=0, column=3, sticky='e', padx=(0, 10))
         self.refresh_button = ttk.Button(toolbar, text='Refresh', command=self.refresh_tickets,
                                          style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=3, sticky='e')
+        self.refresh_button.grid(row=0, column=4, sticky='e')
 
         search_area = ttk.Frame(content, style='Helpdesk.TFrame')
         search_area.grid(row=2, column=0, sticky='ew', pady=(0, 12))
@@ -221,9 +226,10 @@ class TicketViewer:
     def open_create_ticket(self):
         if self._closed:
             return
-        if self._update_dialog is not None and self._update_dialog.is_open:
-            self._update_dialog.focus()
-            return
+        for dialog in (self._update_dialog, self._delete_dialog):
+            if dialog is not None and dialog.is_open:
+                dialog.focus()
+                return
         if self._create_dialog is not None and self._create_dialog.is_open:
             self._create_dialog.focus()
             return
@@ -232,7 +238,7 @@ class TicketViewer:
     def open_update_ticket(self):
         if self._closed:
             return
-        for dialog in (self._create_dialog, self._update_dialog):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -242,6 +248,35 @@ class TicketViewer:
                                 parent=self.root)
             return
         self._update_dialog = UpdateTicketDialog(self.root, int(selection[0]), self._request_refresh)
+
+    def open_delete_ticket(self):
+        if self._closed:
+            return
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog):
+            if dialog is not None and dialog.is_open:
+                dialog.focus()
+                return
+        selection = self.tree.selection()
+        if len(selection) != 1:
+            messagebox.showinfo('Select a Ticket', 'Please select one ticket row before clicking Delete Ticket.',
+                                parent=self.root)
+            return
+        try:
+            ticket_id = int(selection[0])
+            validate_ticket_id(ticket_id)
+        except (TypeError, ValueError):
+            messagebox.showinfo('Select a Ticket', 'Please Refresh and select a valid ticket row.', parent=self.root)
+            return
+        self._delete_dialog = DeleteTicketDialog(self.root, ticket_id, self._refresh_after_deletion)
+
+    def _refresh_after_deletion(self, ticket_id):
+        if self._closed:
+            return
+        # Remove the confirmed missing row even if the subsequent refresh fails.
+        row_id = str(ticket_id)
+        if self.tree.exists(row_id):
+            self.tree.delete(row_id)
+        self._request_refresh()
 
     def _refresh_after_creation(self):
         self._request_refresh()
@@ -276,7 +311,7 @@ class TicketViewer:
     def close(self):
         if self._closed:
             return
-        dialogs = (self._create_dialog, self._update_dialog)
+        dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()

@@ -269,7 +269,7 @@ Subject, Priority, Status, Assigned To, and Created At. It loads tickets on star
 Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
-the last successful rows. The GUI supports viewing, creating, searching, and updating tickets; the
+the last successful rows. The GUI supports viewing, creating, searching, updating, and deleting tickets; the
 existing CLI remains available with `python app.py`.
 
 Manual checks:
@@ -449,3 +449,73 @@ Manual checks (use disposable test tickets):
    dialog must produce friendly save feedback rather than a crash.
 10. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Tests use mocks
     and require neither an interactive GUI session nor a live database.
+
+## Delete Ticket in the GUI
+
+Select one ticket row, then click **Delete Ticket** beside Update Ticket. With no
+selection, a friendly message asks you to select one ticket; no deletion is attempted.
+The confirmation window loads fresh ticket information through the existing
+repository and displays Ticket ID, Employee Name, Subject, Status, and Assigned
+Technician, including existing inactive assignments. It clearly warns that deletion
+is permanent and removes that ticket's activity history and notes.
+
+**Opening the window does not delete anything.** Cancel is focused by default.
+Cancel, Escape, or the window's close button dismisses the preview without changing
+the ticket. Only clicking **Permanently Delete** confirms deletion. That button is
+disabled until current ticket details load, and both buttons are disabled during
+deletion to prevent repeated requests or hiding a pending result. Closing the main
+window waits for any pending deletion. Only one create/update/delete dialog opens
+at a time.
+
+Reads and deletion run in background threads. The existing `delete_ticket` repository
+function rechecks and locks the selected ID, deletes at most one ticket with
+parameterized SQL, and commits or rolls back using its existing safeguards. The
+GUI contains no DELETE SQL and does not delete notes/history separately; the
+existing foreign keys handle their `ON DELETE CASCADE` relationships. No schema
+change, setup command, or extra dependency is required.
+
+A successful deletion closes the dialog, shows a success message, immediately
+removes the selected row, and refreshes the existing table. **The last submitted
+search filter stays active.** Other matching tickets remain visible; deleting the
+last match produces `No matching tickets found.` Clear Search restores the full
+remaining list. If a table load is already running, its older result is discarded
+and a new refresh follows so it cannot restore the deleted ticket. Even if the
+follow-up refresh fails, the confirmed deleted row remains removed.
+
+Missing tickets produce friendly feedback and refresh the table without reporting
+deletion success. Database errors leave the confirmation window open, restore its
+buttons, and show guidance. If deletion cannot be confirmed, Cancel and use Refresh
+to check the ticket before deciding whether to retry. Existing ticket creation,
+updates, search, assignment, CLI history, and CLI notes behavior are unchanged.
+
+Manual checks (delete only disposable test tickets):
+
+1. In Git Bash, launch `.venv/Scripts/python.exe gui_app.py`. Without selecting a
+   row, click Delete Ticket; expect a friendly selection message and no deletion.
+2. Select a test ticket and click Delete Ticket. Check the fresh Ticket ID, employee,
+   subject, status, assigned technician, and warning that deletion is permanent.
+   Cancel should have focus; loading the preview must not delete the ticket.
+3. Click Cancel and verify the ticket still appears after Refresh. Reopen and test
+   Escape and the dialog's close button; both must also leave the ticket unchanged.
+4. Reopen the confirmation for the same test ticket and click Permanently Delete.
+   Expect a success message containing its ID, a closed dialog, immediate removal
+   of that row, and a refreshed table. Other tickets and technicians must remain.
+5. Search for a test ticket by its ID or subject, delete it, and verify the active
+   search remains. Other matches should stay visible; no remaining matches should
+   show the friendly empty result. Clear Search should show all remaining tickets.
+6. Create another disposable ticket and add a note through CLI option 8. Confirm
+   it has history through CLI option 7, then delete it in the GUI. The deletion
+   should succeed without foreign-key errors; CLI ticket/history/notes lookups for
+   its ID should say the ticket does not exist. Its technician must remain.
+7. Open a disposable ticket's confirmation, then delete that ticket through the
+   CLI before clicking Permanently Delete in the GUI. Expect Ticket Not Found and
+   a refreshed table, with no false success or crash.
+8. Open a confirmation, temporarily make MySQL unavailable, and click Permanently
+   Delete. Expect friendly feedback and usable Cancel after the failed request.
+   Restore MySQL, Cancel, and Refresh to check the ticket before retrying. With
+   MySQL unavailable when opening the preview, deletion must remain disabled.
+9. Verify View, Refresh, Create, Search, Update, and CLI menus still work. Repeated
+   attempts to open Delete Ticket must reuse the same confirmation, and repeated
+   confirmation clicks while deleting must not start additional deletions.
+10. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Automated checks
+    use mocks and require neither an interactive GUI nor live database changes.

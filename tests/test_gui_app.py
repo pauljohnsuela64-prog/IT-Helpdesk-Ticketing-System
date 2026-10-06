@@ -29,6 +29,7 @@ def viewer_without_window():
     viewer._poll_id = None
     viewer._create_dialog = None
     viewer._update_dialog = None
+    viewer._delete_dialog = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._loading_search = ''
@@ -208,7 +209,8 @@ class GuiConstructionTests(unittest.TestCase):
                                     'Subject', 'Priority', 'Status', 'Assigned To', 'Created At'])
         buttons = {item.kwargs['text']: item.kwargs['command'] for item in button.call_args_list}
         self.assertEqual(buttons, {'Create Ticket': viewer.open_create_ticket,
-                                   'Update Ticket': viewer.open_update_ticket, 'Refresh': refresh,
+                                   'Update Ticket': viewer.open_update_ticket,
+                                   'Delete Ticket': viewer.open_delete_ticket, 'Refresh': refresh,
                                    'Search': viewer.perform_search, 'Clear Search': viewer.clear_search})
         entry.return_value.bind.assert_called_once_with('<Return>', viewer.perform_search)
         tree.assert_called_once()
