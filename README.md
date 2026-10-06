@@ -931,6 +931,7 @@ Login. No database migration or new dependency is required.
 | Dashboard, View Tickets, Search, Refresh | Allowed | Allowed |
 | Create Ticket, Update Ticket | Allowed | Allowed |
 | View History, View Notes, Add Note | Allowed | Allowed |
+| Change own password | Allowed | Allowed |
 | Delete Ticket | Allowed | Disabled |
 | Manage Technicians (including add/status changes) | Allowed | Disabled |
 | Delete Note | Allowed | Disabled |
@@ -1097,7 +1098,8 @@ Logout closes the management window and revokes its session permissions. A user
 status save already in progress must finish first. New logins recalculate button
 visibility, including Admin → Technician → Admin in the same program. Existing
 Create Account, CLI, and the administrator/fallback `manage_users.py` keep working.
-No migration, password change, username/role editing, or user deletion is added.
+User Management does not provide password reset, username/role editing, or user
+deletion. No migration is required.
 
 Manual checks from the project directory in Git Bash:
 
@@ -1140,4 +1142,73 @@ Manual checks from the project directory in Git Bash:
    .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_user_management.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_gui_users.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests -v
+   ```
+
+## GUI Change Password
+
+Both Active Admin and Technician users have a Change Password button beside
+Logout and their logged-in information. It opens one dialog containing masked
+Current Password, New Password, and Confirm New Password fields. Press Enter
+in a password field or click Save to submit. Cancel closes without saving.
+
+The dialog uses only the logged-in account's ID; it offers no account selector
+or administrator password reset. Existing session permissions are checked when
+opening, submitting, and starting the database worker. Logout closes an unsaved
+dialog and clears its fields. A password save already in progress finishes
+before logout or application exit.
+
+The shared repository validator reuses the existing password rules. Blank and
+whitespace-only new passwords are rejected, confirmation must match, and the
+new password must differ from the current password. Passwords are not trimmed:
+intentional leading/trailing spaces remain part of the credential. Incorrect
+current passwords show `Current password is incorrect.` Mismatched confirmation
+shows `New passwords do not match.` Validation/database errors keep the form
+open for retry.
+
+`user_repository.change_password` locks the current account row and checks its
+Active status, supported role, and current password before updating only that
+account's password hash. It reuses salted scrypt hashing and parameterized SQL
+in one transaction. Failed verification never writes; database/hashing failures
+roll back with safe feedback. Passwords and hashes are never shown or logged.
+Hashing/database work runs off the Tk thread.
+
+Success shows `Password changed successfully.` and closes the dialog while
+keeping the current session logged in. After logout, only the new password works.
+No database setup or schema migration is required. CLI and `manage_users.py`
+behavior is unchanged.
+
+Manual checks from the project directory in Git Bash:
+
+1. Launch the GUI and log in using an existing Active Admin account:
+
+   ```bash
+   .venv/Scripts/python.exe gui_app.py
+   ```
+
+2. Verify logged-in information is still visible. Click Change Password and
+   verify all three fields are masked. There must be no username/user selector.
+3. Enter an incorrect current password and matching, different new values of
+   your own choosing. Save; expect `Current password is incorrect.` and an open
+   form. The account's password must remain unchanged.
+4. Test blank and whitespace-only new passwords, mismatched confirmation, and
+   reusing the correct current password as the new password. Expect friendly
+   validation messages and no save. Mismatched confirmation must show
+   `New passwords do not match.`
+5. Fill valid fields and click Cancel. Reopen the form; fields should be empty.
+   Logout and verify the original password still allows login.
+6. Log in again, enter the correct current password and matching different new
+   values, then click Save (or press Enter). Expect
+   `Password changed successfully.` The form closes, the main window remains
+   logged in, and dashboard/ticket actions continue working with the same role.
+7. Logout. Try the old password; expect `Invalid username or password.` Try the
+   new password; login must succeed with the same name, role, and permissions.
+8. Repeat steps 2–7 using an Active Technician account. Confirm restricted
+   actions remain restricted and the Admin account's password was unaffected.
+   Also verify Admin Manage Users, account creation, technicians, history,
+   notes, and the existing CLI remain available as before.
+9. Run automated checks without an interactive GUI or live database writes:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p '*change_password.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests
    ```

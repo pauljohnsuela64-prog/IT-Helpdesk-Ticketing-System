@@ -202,13 +202,13 @@ class ViewerSessionTests(unittest.TestCase):
             texts = [item.kwargs.get('text') for item in labels.call_args_list]
             self.assertIn(f'Logged in as: Test Operator ({role})', texts)
             self.assertTrue('password_hash' not in viewer.user)
-            self.assertTrue({'Logout', 'Create Ticket', 'Update Ticket', 'Delete Ticket', 'Manage Technicians',
+            self.assertTrue({'Logout', 'Change Password', 'Create Ticket', 'Update Ticket', 'Delete Ticket', 'Manage Technicians',
                              'Ticket Notes', 'View History'}.issubset({item.kwargs['text'] for item in buttons.call_args_list}))
 
     def test_logout_closes_all_children_and_cancels_table_and_dashboard_reads_without_exiting(self):
         viewer = self.viewer()
         viewer._poll_id = 'pending-table'
-        for field in ('_create_dialog', '_update_dialog', '_delete_dialog', '_technician_window', '_notes_window'):
+        for field in ('_create_dialog', '_update_dialog', '_delete_dialog', '_technician_window', '_user_window', '_password_dialog', '_notes_window'):
             setattr(viewer, field, MagicMock(is_open=True, is_saving=False))
         viewer._history_window = MagicMock(is_open=True)
         viewer.logout()
@@ -226,7 +226,7 @@ class ViewerSessionTests(unittest.TestCase):
         viewer.root.destroy.assert_not_called()
 
     def test_pending_write_keeps_session_logged_in_until_save_finishes(self):
-        for field in ('_create_dialog', '_update_dialog', '_delete_dialog', '_technician_window', '_notes_window'):
+        for field in ('_create_dialog', '_update_dialog', '_delete_dialog', '_technician_window', '_user_window', '_password_dialog', '_notes_window'):
             viewer = self.viewer()
             active = MagicMock(is_open=True, is_saving=True)
             setattr(viewer, field, active)

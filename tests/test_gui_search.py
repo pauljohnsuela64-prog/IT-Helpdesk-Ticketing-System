@@ -37,6 +37,7 @@ def viewer_without_window():
     viewer._delete_dialog = None
     viewer._technician_window = None
     viewer._user_window = None
+    viewer._password_dialog = None
     viewer._history_window = None
     viewer._notes_window = None
     viewer._refresh_pending = False

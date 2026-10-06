@@ -5,6 +5,7 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_change_password import ChangePasswordDialog
 from gui_create_ticket import CreateTicketDialog
 from gui_dashboard import DashboardPanel
 from gui_session import HelpDeskApplication
@@ -68,6 +69,7 @@ class TicketViewer:
         self._delete_dialog = None
         self._technician_window = None
         self._user_window = None
+        self._password_dialog = None
         self._history_window = None
         self._notes_window = None
         self._refresh_pending = False
@@ -142,8 +144,14 @@ class TicketViewer:
             name = ''.join(character if character.isprintable() else ' ' for character in self.user['full_name'])
             ttk.Label(header, text=f'Logged in as: {name} ({self.user["role"]})', wraplength=730,
                       style='Helpdesk.Status.TLabel').grid(row=2, column=0, sticky='w', pady=(10, 0))
-            self.logout_button = ttk.Button(header, text='Logout', command=self.logout, style='Helpdesk.TButton')
-            self.logout_button.grid(row=2, column=1, sticky='e', padx=(16, 0), pady=(10, 0))
+            account_controls = ttk.Frame(header, style='Helpdesk.TFrame')
+            account_controls.grid(row=2, column=1, sticky='e', padx=(16, 0), pady=(10, 0))
+            if self.permissions.allows('change_password'):
+                self.password_button = ttk.Button(account_controls, text='Change Password', command=self.open_change_password,
+                                                   style='Helpdesk.TButton')
+                self.password_button.grid(row=0, column=0, padx=(0, 10))
+            self.logout_button = ttk.Button(account_controls, text='Logout', command=self.logout, style='Helpdesk.TButton')
+            self.logout_button.grid(row=0, column=1)
 
         self.dashboard = DashboardPanel(content, self.filter_by_status)
         self.dashboard.frame.grid(row=1, column=0, sticky='ew', pady=(0, 18))
@@ -286,7 +294,7 @@ class TicketViewer:
     def open_create_ticket(self):
         if self._closed or self._focus_notes_dialog():
             return
-        for dialog in (self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
+        for dialog in (self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -298,7 +306,7 @@ class TicketViewer:
     def open_update_ticket(self):
         if self._closed or self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -314,7 +322,7 @@ class TicketViewer:
             return
         if self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -337,7 +345,7 @@ class TicketViewer:
             return
         if self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -351,10 +359,17 @@ class TicketViewer:
             return
         self._user_window = UserManagementWindow(self.root, self.user, permissions=self.permissions)
 
+    def open_change_password(self):
+        if self._closed or not require_permission(self.permissions, 'change_password', self.root):
+            return
+        if self._focus_notes_dialog() or self._focus_ticket_dialog():
+            return
+        self._password_dialog = ChangePasswordDialog(self.root, self.user['user_id'], permissions=self.permissions)
+
     def open_ticket_history(self):
         if self._closed or self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -384,7 +399,7 @@ class TicketViewer:
         return False
 
     def _focus_ticket_dialog(self):
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return True
@@ -465,7 +480,7 @@ class TicketViewer:
         if self._closed:
             return False
         dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window,
-                   self._user_window, self._notes_window)
+                   self._user_window, self._password_dialog, self._notes_window)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()

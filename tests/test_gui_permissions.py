@@ -35,7 +35,7 @@ def mock_viewer_widgets(stack):
 class RolePolicyTests(unittest.TestCase):
     def test_complete_admin_and_technician_permission_matrix(self):
         allowed = ('dashboard', 'view_tickets', 'search_tickets', 'create_ticket', 'update_ticket',
-                   'view_history', 'view_notes', 'add_note', 'refresh')
+                   'view_history', 'view_notes', 'add_note', 'refresh', 'change_password')
         restricted = ('delete_ticket', 'manage_technicians', 'delete_note', 'manage_users')
         for role in ('Admin', 'Technician'):
             session = policy(role)
@@ -75,7 +75,7 @@ class MainWindowPermissionTests(unittest.TestCase):
                     else:
                         button.state.assert_not_called()
                 for button in (viewer.create_button, viewer.update_button, viewer.history_button,
-                               viewer.notes_button, viewer.refresh_button, viewer.logout_button):
+                               viewer.notes_button, viewer.refresh_button, viewer.logout_button, viewer.password_button):
                     button.state.assert_not_called()
                 self.assertIn(f'Logged in as: Test Operator ({role})',
                               [call.kwargs.get('text') for call in labels.call_args_list])

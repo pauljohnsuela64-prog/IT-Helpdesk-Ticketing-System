@@ -1,4 +1,4 @@
-"""User creation and authentication restricted to the helpdesk database."""
+"""Application accounts and authentication restricted to the helpdesk database."""
 from pathlib import Path
 import mysql.connector
 
@@ -41,6 +41,10 @@ class UserManagementPermissionError(Exception):
 
 class UserStatusChangeError(UserUpdateError):
     """A status change would disable the current or last Active Admin."""
+
+
+class UserPasswordChangeError(Exception):
+    """A safe error when a self-service password change cannot be confirmed."""
 
 
 class UserAuthorizationError(UserCreateError):
@@ -97,6 +101,67 @@ def public_user(user):
 def validate_user_id(user_id):
     if type(user_id) is not int or not 1 <= user_id <= 2147483647:
         raise ValueError('User ID must be a positive number up to 2147483647.')
+
+
+def validate_password_change(current_password, new_password, confirmation):
+    """Reuse password rules without trimming or including secrets in errors."""
+    try:
+        validate_password(current_password)
+    except ValueError:
+        raise ValueError('Current password is incorrect.') from None
+    if not isinstance(new_password, str) or not new_password.strip():
+        raise ValueError('New password cannot be blank.')
+    validate_password(new_password)
+    if new_password != confirmation:
+        raise ValueError('New passwords do not match.')
+    if new_password == current_password:
+        raise ValueError('New password must be different from the current password.')
+
+
+def change_password(user_id, current_password, new_password, confirmation):
+    """Change only the session account's password after verifying its credential.
+
+    There is no separate target account or administrator override. Lock the row
+    until commit so concurrent requests must verify the latest stored password.
+    """
+    validate_user_id(user_id)
+    validate_password_change(current_password, new_password, confirmation)
+    try:
+        with get_connection() as connection:
+            try:
+                with connection.cursor(dictionary=True) as cursor:
+                    cursor.execute(
+                        'SELECT password_hash, role, status FROM helpdesk.users WHERE user_id = %s FOR UPDATE',
+                        (user_id,),
+                    )
+                    user = cursor.fetchone()
+                    if user is None or user['status'] != 'Active' or user['role'] not in USER_ROLES:
+                        raise UserPasswordChangeError('Unable to change password for this account. Please log in again.')
+                    if not verify_password(current_password, user['password_hash']):
+                        raise UserPasswordChangeError('Current password is incorrect.')
+                    password_hash = hash_password(new_password)
+                    cursor.execute(
+                        'UPDATE helpdesk.users SET password_hash = %s WHERE user_id = %s LIMIT 1',
+                        (password_hash, user_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise UserPasswordChangeError('Password change could not be confirmed. Please log out and check your credentials before retrying.')
+                connection.commit()
+                return True
+            except (mysql.connector.Error, PasswordHashError, UserPasswordChangeError):
+                try:
+                    connection.rollback()
+                except mysql.connector.Error:
+                    pass
+                raise
+    except ValueError:
+        raise UserPasswordChangeError(CONFIGURATION_MESSAGE) from None
+    except PasswordHashError as error:
+        raise UserPasswordChangeError(str(error)) from None
+    except mysql.connector.Error as error:
+        if error.errno == 1146:
+            raise UserPasswordChangeError(SETUP_MESSAGE) from None
+        raise UserPasswordChangeError('Password change could not be confirmed. Please check the database connection and try again.') from None
 
 
 def _require_active_admin(cursor, acting_user_id, for_update=False):
