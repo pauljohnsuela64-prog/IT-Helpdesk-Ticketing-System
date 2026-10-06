@@ -57,7 +57,7 @@ def setup_technicians_table():
 def get_technicians():
     """Return technician dictionaries ordered by their generated ID."""
     return _read_technicians(
-        'SELECT technician_id, full_name, email, status '
+        'SELECT technician_id, full_name, email, status, created_at '
         'FROM helpdesk.technicians ORDER BY technician_id'
     )
 

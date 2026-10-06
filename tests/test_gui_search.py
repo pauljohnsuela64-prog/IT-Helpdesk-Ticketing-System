@@ -32,6 +32,7 @@ def viewer_without_window():
     viewer._create_dialog = None
     viewer._update_dialog = None
     viewer._delete_dialog = None
+    viewer._technician_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._loading_search = ''

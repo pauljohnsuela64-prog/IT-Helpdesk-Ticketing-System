@@ -30,6 +30,7 @@ def viewer_without_window():
     viewer._create_dialog = None
     viewer._update_dialog = None
     viewer._delete_dialog = None
+    viewer._technician_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._loading_search = ''
@@ -208,7 +209,8 @@ class GuiConstructionTests(unittest.TestCase):
         self.assertEqual(headings, ['Ticket ID', 'Employee', 'Department', 'Category',
                                     'Subject', 'Priority', 'Status', 'Assigned To', 'Created At'])
         buttons = {item.kwargs['text']: item.kwargs['command'] for item in button.call_args_list}
-        self.assertEqual(buttons, {'Create Ticket': viewer.open_create_ticket,
+        self.assertEqual(buttons, {'Manage Technicians': viewer.open_technician_management,
+                                   'Create Ticket': viewer.open_create_ticket,
                                    'Update Ticket': viewer.open_update_ticket,
                                    'Delete Ticket': viewer.open_delete_ticket, 'Refresh': refresh,
                                    'Search': viewer.perform_search, 'Clear Search': viewer.clear_search})

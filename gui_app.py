@@ -1,4 +1,4 @@
-"""Tkinter ticket viewing, creation, search, updates, and deletion: python gui_app.py."""
+"""Tkinter ticket and technician management: python gui_app.py."""
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from gui_create_ticket import CreateTicketDialog
 from gui_delete_ticket import DeleteTicketDialog
+from gui_technicians import TechnicianManagementWindow
 from gui_update_ticket import UpdateTicketDialog
 from ticket_repository import TicketReadError, get_tickets, search_tickets, validate_ticket_id
 
@@ -55,6 +56,7 @@ class TicketViewer:
         self._create_dialog = None
         self._update_dialog = None
         self._delete_dialog = None
+        self._technician_window = None
         self._refresh_pending = False
         self._active_search = ''
         self._loading_search = ''
@@ -105,6 +107,10 @@ class TicketViewer:
                   style='Helpdesk.Title.TLabel').grid(row=0, column=0, sticky='w')
         ttk.Label(header, text='Ticket Management',
                   style='Helpdesk.Subtitle.TLabel').grid(row=1, column=0, sticky='w', pady=(6, 0))
+        header.columnconfigure(0, weight=1)
+        self.technician_button = ttk.Button(header, text='Manage Technicians',
+                                            command=self.open_technician_management, style='Helpdesk.TButton')
+        self.technician_button.grid(row=1, column=1, sticky='e', padx=(16, 0))
 
         toolbar = ttk.Frame(content, style='Helpdesk.TFrame')
         toolbar.grid(row=1, column=0, sticky='ew', pady=(0, 12))
@@ -226,7 +232,7 @@ class TicketViewer:
     def open_create_ticket(self):
         if self._closed:
             return
-        for dialog in (self._update_dialog, self._delete_dialog):
+        for dialog in (self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -238,7 +244,7 @@ class TicketViewer:
     def open_update_ticket(self):
         if self._closed:
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -252,7 +258,7 @@ class TicketViewer:
     def open_delete_ticket(self):
         if self._closed:
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -268,6 +274,15 @@ class TicketViewer:
             messagebox.showinfo('Select a Ticket', 'Please Refresh and select a valid ticket row.', parent=self.root)
             return
         self._delete_dialog = DeleteTicketDialog(self.root, ticket_id, self._refresh_after_deletion)
+
+    def open_technician_management(self):
+        if self._closed:
+            return
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+            if dialog is not None and dialog.is_open:
+                dialog.focus()
+                return
+        self._technician_window = TechnicianManagementWindow(self.root)
 
     def _refresh_after_deletion(self, ticket_id):
         if self._closed:
@@ -311,7 +326,7 @@ class TicketViewer:
     def close(self):
         if self._closed:
             return
-        dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog)
+        dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()

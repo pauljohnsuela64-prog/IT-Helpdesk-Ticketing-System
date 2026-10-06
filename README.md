@@ -269,8 +269,9 @@ Subject, Priority, Status, Assigned To, and Created At. It loads tickets on star
 Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
-the last successful rows. The GUI supports viewing, creating, searching, updating, and deleting tickets; the
-existing CLI remains available with `python app.py`.
+the last successful rows. The GUI supports viewing, creating, searching, updating,
+and deleting tickets, plus technician management. The existing CLI remains available
+with `python app.py`.
 
 Manual checks:
 
@@ -519,3 +520,82 @@ Manual checks (delete only disposable test tickets):
    confirmation clicks while deleting must not start additional deletions.
 10. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Automated checks
     use mocks and require neither an interactive GUI nor live database changes.
+
+## Technician Management in the GUI
+
+Click **Manage Technicians** in the main window's header to open the separate
+Technician Management window. Its resizable table shows Technician ID, Full Name,
+Email, Status, and Created At, with single-row selection and both scrollbars. It
+loads all technicians, including Inactive ones. **Refresh** reloads the table;
+an empty list shows friendly feedback. Database errors preserve previously loaded
+rows and leave Refresh available for recovery.
+
+**Add Technician** opens a small Full Name/Email form. It reuses shared validation
+and the existing repository: text is trimmed, blank values are rejected, names
+require at least one alphabetic letter, and existing field-length limits apply.
+Duplicate emails are prevented by the existing database UNIQUE constraint and
+shown as friendly feedback without closing the form. MySQL supplies the technician
+ID, Active status, and creation timestamp. A successful save shows the new ID,
+closes the form, and automatically refreshes the technician table.
+
+**Change Technician Status** requires selecting one technician row. The dialog
+loads that technician's fresh name, email, and status through the repository, then
+offers a readonly Active/Inactive dropdown. Save Changes asks for confirmation
+before using the existing status update transaction. Unchanged status makes no
+update; declining confirmation keeps the form open without saving. A successful
+change closes the form, shows feedback, and refreshes the table. Only availability
+changes: technicians remain in the database and assigned ticket names, ticket
+history, and ticket notes are preserved.
+
+Technician management is modal: close it to return to tickets. One management
+window and one add/status form open at a time; child forms return focus to their
+management window when closed. Cancel, Escape, and a form's close button discard
+unsaved changes. **Close** exits management. Pending saves disable form controls
+and prevent closing until their result is known. Database reads and writes run in
+background threads; widget updates stay on Tkinter's main thread. If an older table
+load overlaps a save, it is discarded and followed by a fresh read.
+
+After making a technician Inactive, close management and open Update Ticket:
+the technician is absent from new-assignment choices while Keep current preserves
+their name on an already assigned ticket. Reactivate them through management,
+then reopen Update Ticket to see them available again. The existing repository
+also rechecks Active status when saving an assignment, including changes made
+through the CLI. The main ticket search filter stays unchanged while managing
+technicians. No migration, setup command, schema change, or new dependency is needed.
+
+Manual checks (use a test technician and disposable tickets):
+
+1. In Git Bash, run `.venv/Scripts/python.exe gui_app.py`, then click Manage
+   Technicians. Check the five columns, timestamps, Active/Inactive rows, scrolling,
+   selection, Refresh, and Close. Repeated open requests should reuse this window.
+2. Click Change Technician Status without selecting a row; expect a friendly
+   message and no save. Select a technician to check their current details and
+   the readonly Active/Inactive choices.
+3. Click Add Technician. Test blank/whitespace values, name `3`, and name `!!!`.
+   Each invalid save must keep the form open. Test blank email and overlong name
+   (over 100 characters) or email (over 150 characters) as well.
+4. Add Full Name `  GUI Test Technician  ` and a unique Email such as
+   `  gui-tech-test@example.com  `. Expect a success message with a generated ID,
+   automatic table refresh, trimmed text, Active status, and Created At. Try the
+   same email again; expect friendly duplicate feedback and no additional row.
+5. Select the test technician, choose Inactive, and decline confirmation. Refresh
+   to verify Active is unchanged. Repeat and confirm; verify Inactive stays visible
+   in the technician table. Saving the current status should make no change.
+6. Close management and open Update Ticket. Verify the inactive test technician is
+   absent from assignment choices. If a disposable ticket was already assigned to
+   them, its name must remain visible in the table and Keep current option.
+7. Cancel the ticket dialog, reopen management, reactivate the technician with
+   confirmation, then close management. Open Update Ticket again; the technician
+   must now be selectable. Verify existing assignments, history, and notes remain.
+8. Open a new Add Technician form and Cancel, Escape, or close it; no technician
+   should be saved, and management controls should work afterward. Close and reopen
+   management, then verify Create, Search, Update, Delete, and the ticket Refresh
+   button still work, including any active search filter.
+9. With MySQL temporarily unavailable, technician Refresh should show friendly
+   feedback and preserve old rows. An attempted add/status save should keep the
+   form values and restore controls after the error. Restore MySQL and refresh to
+   check the saved state before retrying. A failed status-detail load must leave
+   Save Changes disabled while Cancel remains usable.
+10. Check CLI technician actions through option 6, ticket history through option 7,
+    and notes through option 8. Run `.venv/Scripts/python.exe -m unittest discover -s
+    tests -v`; the tests require no interactive GUI or live database changes.

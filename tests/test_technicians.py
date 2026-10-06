@@ -74,7 +74,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(repo.get_technicians(), [TECHNICIAN])
         self.connection.cursor.assert_called_once_with(dictionary=True)
         self.cursor.execute.assert_called_once_with(
-            'SELECT technician_id, full_name, email, status FROM helpdesk.technicians ORDER BY technician_id'
+            'SELECT technician_id, full_name, email, status, created_at FROM helpdesk.technicians ORDER BY technician_id'
         )
         self.connection.commit.assert_not_called()
         self.cursor.fetchall.return_value = []
