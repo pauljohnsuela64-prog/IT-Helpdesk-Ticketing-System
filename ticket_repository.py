@@ -3,7 +3,7 @@ import mysql.connector
 
 from database import get_connection
 from input_validation import validate_text
-from technician_repository import get_active_technician, validate_technician_id
+from technician_repository import TechnicianReadError, get_active_technician, get_technician, validate_technician_id
 from ticket_history_repository import SETUP_MESSAGE, record_ticket_created, record_ticket_updated
 
 
@@ -11,35 +11,78 @@ class TicketReadError(Exception):
     """A safe, user-facing error when tickets cannot be retrieved."""
 
 
+MISSING_TECHNICIAN_LINK = 'Your account is not linked to a technician record. Contact an administrator.'
+
+
+class AssignedTicketsLinkError(TicketReadError):
+    """The current session cannot resolve a technician record for its own view."""
+
+
+_TICKET_LIST_SQL = (
+    'SELECT ticket_id, employee_name, department, category, '
+    'subject, priority, status, assigned_to, created_at FROM helpdesk.tickets '
+)
+_SEARCH_CLAUSE = (
+    "LOWER(CAST(ticket_id AS CHAR)) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(employee_name) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(department) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(category) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(subject) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(priority) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(status) LIKE LOWER(%s) ESCAPE '!' "
+    "OR LOWER(assigned_to) LIKE LOWER(%s) ESCAPE '!'"
+)
+
+
+def _search_pattern(search_term):
+    search_term = search_term.strip()
+    if not search_term:
+        return None
+    # Escape LIKE wildcards so %, _ and ! match literal text in either view.
+    return '%' + search_term.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+
+
 def get_tickets():
     """Return ticket dictionaries from the helpdesk database only."""
     return _read_tickets(
-        'SELECT ticket_id, employee_name, department, category, '
-        'subject, priority, status, assigned_to, created_at '
-        'FROM helpdesk.tickets ORDER BY ticket_id'
+        _TICKET_LIST_SQL + 'ORDER BY ticket_id'
     )
 
 
 def search_tickets(search_term):
     """Find case-insensitive literal substrings using a read-only SELECT."""
-    search_term = search_term.strip()
-    if not search_term:
+    pattern = _search_pattern(search_term)
+    if pattern is None:
         return []
-    # Escape LIKE wildcards so %, _ and ! in the term match literal text.
-    pattern = '%' + search_term.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
     return _read_tickets(
-        'SELECT ticket_id, employee_name, department, category, '
-        'subject, priority, status, assigned_to, created_at FROM helpdesk.tickets '
-        "WHERE LOWER(CAST(ticket_id AS CHAR)) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(employee_name) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(department) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(category) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(subject) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(priority) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(status) LIKE LOWER(%s) ESCAPE '!' "
-        "OR LOWER(assigned_to) LIKE LOWER(%s) ESCAPE '!' "
-        'ORDER BY ticket_id',
+        _TICKET_LIST_SQL + 'WHERE ' + _SEARCH_CLAUSE + ' ORDER BY ticket_id',
         (pattern,) * 8,
+    )
+
+
+def get_assigned_tickets(technician_id, search_term=''):
+    """Read the linked record's name assignments, optionally within a search.
+
+    Existing ticket assignments store names, so equal technician names share
+    the same list. Inactive records retain their assignments and may be viewed.
+    """
+    try:
+        validate_technician_id(technician_id)
+    except ValueError:
+        raise AssignedTicketsLinkError(MISSING_TECHNICIAN_LINK) from None
+    try:
+        technician = get_technician(technician_id)
+    except TechnicianReadError as error:
+        raise TicketReadError(str(error)) from None
+    if technician is None or not technician.get('full_name'):
+        raise AssignedTicketsLinkError(MISSING_TECHNICIAN_LINK)
+    pattern = _search_pattern(search_term)
+    # Parentheses keep every search field inside the exact assignment scope.
+    return _read_tickets(
+        _TICKET_LIST_SQL + 'WHERE assigned_to = %s '
+        + ('AND (' + _SEARCH_CLAUSE + ') ' if pattern is not None else '')
+        + 'ORDER BY ticket_id',
+        (technician['full_name'],) + ((pattern,) * 8 if pattern is not None else ()),
     )
 
 

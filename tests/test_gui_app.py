@@ -44,6 +44,11 @@ def viewer_without_window():
     viewer._active_search = ''
     viewer._active_status = ''
     viewer._loading_search = ''
+    viewer._assigned_view = False
+    viewer._loading_assigned_view = False
+    viewer.all_tickets_button = None
+    viewer.assigned_tickets_button = None
+    viewer.view_status = None
     viewer.search_term = MagicMock()
     viewer.search_term.get.return_value = ''
     return viewer

@@ -44,6 +44,8 @@ def viewer_without_window():
     viewer._active_search = ''
     viewer._active_status = ''
     viewer._loading_search = ''
+    viewer._assigned_view = False
+    viewer._loading_assigned_view = False
     return viewer
 
 

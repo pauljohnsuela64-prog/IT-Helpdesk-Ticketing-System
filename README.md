@@ -1330,3 +1330,93 @@ Manual tests:
    .venv/Scripts/python.exe -m unittest discover -s tests -p '*user_technician*.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests
    ```
+
+## My Assigned Tickets in the GUI
+
+Technician sessions now have All Tickets and My Assigned Tickets buttons above
+the existing ticket table, with a label showing the current view. Every login
+starts in All Tickets. Admins keep the existing full ticket interface.
+
+My Assigned Tickets resolves the session's linked `technician_id` to its
+technician record, then loads that record's name assignments using parameterized,
+read-only SQL. The existing `tickets.assigned_to` column stores names, so
+technicians with equal names under the database collation share the same list.
+Distinct technician names are needed to distinguish their assignments with this
+schema. No migration or database setup is required for this feature.
+
+Search, including numeric Ticket ID searches, operates within the selected view.
+Switching views keeps the submitted search and dashboard status filter. Clear
+Search removes those filters but keeps All Tickets or My Assigned Tickets
+selected. Refresh and automatic refresh after ticket saves also keep the current
+view and submitted filters. Dashboard counts continue to cover all tickets;
+clicking a status card filters the current ticket list by that exact status.
+
+Reassigned or unassigned tickets disappear from the assigned view after refresh.
+A newly created unassigned ticket is visible in All Tickets. Inactive technician
+records retain their assignments and can still be viewed; the existing Active
+technician requirement for assignment and writing notes remains in place.
+
+A missing or invalid session link displays `Your account is not linked to a
+technician record. Contact an administrator.` without loading All Tickets into
+the assigned view. All Tickets remains available. If an Admin links a previously
+unlinked account through Manage Users, log out and back in to load that link into
+the session. Database failures show friendly feedback and allow retrying Refresh.
+Older background results are discarded when the user changes views or search.
+
+This is a viewing filter. Technician users can still access All Tickets and
+update any ticket with their existing permissions. Login/logout, account linking,
+Admin management, notes and their automatic authors, history, and the CLI keep
+their existing behavior.
+
+Manual tests from the project directory in Git Bash:
+
+1. Use two technician records with distinct names and an account linked to the
+   first record. As Admin, create disposable test tickets and assign one to each
+   technician; keep a third unassigned. Give the tickets a common searchable
+   subject. Launch the application with:
+
+   ```bash
+   .venv/Scripts/python.exe gui_app.py
+   ```
+
+2. Log in as the linked Technician. Confirm the initial view is All Tickets.
+   Click My Assigned Tickets; only the first technician's ticket should appear
+   in the same table. Click All Tickets to restore the full list. Admin sessions
+   should not show these two new controls.
+3. In My Assigned Tickets, search for the common subject. Only your technician's
+   matches should appear. Search for your assigned Ticket ID, with leading and
+   trailing spaces, using Enter. Numeric searches must work. Search for the
+   other technician's Ticket ID (choose an ID absent from your ticket's other
+   fields); expect `No matching assigned tickets found.`
+4. Click Clear Search. Expect the full assigned list and the My Assigned Tickets
+   label to remain. Click Refresh with and without a search; both should keep
+   this view. Switch to All Tickets and confirm Refresh keeps All Tickets.
+   Switching views with a search already submitted should preserve that search.
+5. Click a dashboard status card while in My Assigned Tickets. The table should
+   show only your assignments with that status, while summary counts remain
+   global. Clear Search should remove the status/search filters and stay in
+   My Assigned Tickets. Rapidly switching views and submitting searches should
+   leave only the latest requested results visible.
+6. Update one of your assigned tickets to reassign or unassign it, then confirm
+   the save. It should disappear automatically while the assigned view stays
+   selected. Create a ticket in this view; creation must succeed, and switching
+   to All Tickets should show the new unassigned ticket. Verify All Tickets
+   still lets the Technician update another technician's ticket.
+7. Log in with an existing unlinked Technician account, if available. Click
+   My Assigned Tickets; expect the contact-administrator message and an empty
+   table. All Tickets must still work. Link the account using Admin Manage Users,
+   then log out and back in; My Assigned Tickets should now use the new link.
+   A linked record with no assignments should show `No assigned tickets found.`
+8. Deactivate the first technician record through Admin Manage Technicians.
+   Its existing assigned tickets should still be visible to its linked account,
+   while assignment choices and note creation retain their existing Active-only
+   behavior. Reactivate it afterward. Verify logout/login starts each new
+   session in All Tickets and preserves the correct role permissions.
+9. Check the existing dashboard, ticket actions, technicians, users, Change
+   Password, history, notes, and CLI. Run automated checks without a live database
+   or an interactive GUI:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p '*my_assigned_tickets.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests
+   ```

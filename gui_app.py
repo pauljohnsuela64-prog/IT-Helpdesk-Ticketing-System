@@ -16,7 +16,10 @@ from gui_ticket_notes import TicketNotesWindow
 from gui_technicians import TechnicianManagementWindow
 from gui_update_ticket import UpdateTicketDialog
 from gui_users import UserManagementWindow
-from ticket_repository import STATUSES, TicketReadError, get_tickets, search_tickets, validate_ticket_id
+from ticket_repository import (
+    MISSING_TECHNICIAN_LINK, STATUSES, TicketReadError, get_assigned_tickets,
+    get_tickets, search_tickets, validate_ticket_id,
+)
 from user_repository import public_user
 
 
@@ -76,6 +79,11 @@ class TicketViewer:
         self._active_search = ''
         self._loading_search = ''
         self._active_status = ''
+        self._assigned_view = False
+        self._loading_assigned_view = False
+        self.all_tickets_button = None
+        self.assigned_tickets_button = None
+        self.view_status = None
 
         root.title('IT Help Desk Ticketing System')
         root.geometry('1240x840')
@@ -200,6 +208,18 @@ class TicketViewer:
                                               style='Helpdesk.TButton')
         self.clear_search_button.grid(row=0, column=3)
 
+        if self.user is not None and self.user['role'] == 'Technician' and self.permissions.allows('view_tickets'):
+            views = ttk.Frame(search_area, style='Helpdesk.TFrame')
+            views.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(10, 0))
+            self.all_tickets_button = ttk.Button(views, text='All Tickets', command=self.show_all_tickets,
+                                                 style='Helpdesk.TButton')
+            self.all_tickets_button.grid(row=0, column=0, padx=(0, 10))
+            self.assigned_tickets_button = ttk.Button(views, text='My Assigned Tickets', command=self.show_assigned_tickets,
+                                                      style='Helpdesk.TButton')
+            self.assigned_tickets_button.grid(row=0, column=1, padx=(0, 16))
+            self.view_status = tk.StringVar(master=self.root, value='View: All Tickets')
+            ttk.Label(views, textvariable=self.view_status, style='Helpdesk.Status.TLabel').grid(row=0, column=2, sticky='w')
+
         table = ttk.Frame(content)
         table.grid(row=4, column=0, sticky='nsew')
         table.columnconfigure(0, weight=1)
@@ -245,21 +265,58 @@ class TicketViewer:
         self.dashboard.set_status_filter('')
         self._request_refresh()
 
+    def show_all_tickets(self):
+        if self._closed or not require_permission(self.permissions, 'view_tickets', self.root):
+            return
+        self._set_ticket_view(False)
+
+    def show_assigned_tickets(self):
+        if self._closed or self.user is None or self.user['role'] != 'Technician':
+            return
+        if not require_permission(self.permissions, 'view_tickets', self.root):
+            return
+        self._set_ticket_view(True)
+
+    def _clear_ticket_rows(self):
+        children = self.tree.get_children()
+        if children:
+            self.tree.delete(*children)
+
+    def _set_ticket_view(self, assigned):
+        if self._assigned_view != assigned:
+            # Never show rows from the previous scope under the new view label.
+            self._clear_ticket_rows()
+        self._assigned_view = assigned
+        if self.view_status is not None:
+            self.view_status.set('View: My Assigned Tickets' if assigned else 'View: All Tickets')
+        self.status.set('Loading assigned tickets...' if assigned else 'Loading tickets...')
+        self._request_refresh()
+
     def refresh_tickets(self):
         if self._closed or self._loading:
             return
         self.dashboard.refresh()
         self._loading = True
         self._loading_search = self._active_search
-        self.status.set('Searching tickets...' if self._active_search else 'Loading tickets...')
+        self._loading_assigned_view = self._assigned_view
+        if self._assigned_view:
+            self.status.set('Searching assigned tickets...' if self._active_search else 'Loading assigned tickets...')
+        else:
+            self.status.set('Searching tickets...' if self._active_search else 'Loading tickets...')
         self.refresh_button.state(['disabled'])
-        Thread(target=self._load_tickets, args=(self._loading_search,), daemon=True).start()
+        # Capture view and session ID before starting work; no worker reads GUI state.
+        args = ((self._loading_search, self.user.get('technician_id'), True)
+                if self._assigned_view else (self._loading_search,))
+        Thread(target=self._load_tickets, args=args, daemon=True).start()
         self._poll_id = self.root.after(100, self._check_refresh)
 
-    def _load_tickets(self, search_term=''):
+    def _load_tickets(self, search_term='', technician_id=None, assigned=False):
         """The worker reads data and queues results; it never calls Tkinter."""
         try:
-            tickets = search_tickets(search_term) if search_term else get_tickets()
+            if assigned:
+                tickets = get_assigned_tickets(technician_id, search_term)
+            else:
+                tickets = search_tickets(search_term) if search_term else get_tickets()
         except TicketReadError as error:
             self._results.put((None, str(error)))
         except Exception:
@@ -279,13 +336,18 @@ class TicketViewer:
             self._poll_id = self.root.after(100, self._check_refresh)
             return
         self._loading = False
-        if self._refresh_pending or self._loading_search != self._active_search:
+        if (self._refresh_pending or self._loading_search != self._active_search
+                or self._loading_assigned_view != self._assigned_view):
             # Discard an older result and load the most recently submitted search.
             self._refresh_pending = False
             self.refresh_tickets()
             return
         self.refresh_button.state(['!disabled'])
         if error is not None:
+            if self._assigned_view and error == MISSING_TECHNICIAN_LINK:
+                self._clear_ticket_rows()
+                self.status.set(error)
+                return
             # Leave the last successful table visible when a refresh fails.
             self.status.set(f'Unable to load tickets. {error}')
         else:
@@ -464,7 +526,13 @@ class TicketViewer:
             self.tree.selection_set(selection[0])
             self.tree.focus(selection[0])
         count = len(tickets)
-        if self._active_status:
+        if self._assigned_view:
+            scope = f'{self._active_status} assigned' if self._active_status else 'assigned'
+            self.status.set(f'{count} {scope} ticket{"s" if count != 1 else ""} '
+                            f'{"matched the search" if self._active_search else "loaded"}.'
+                            if count else 'No matching assigned tickets found.' if self._active_search else
+                            f'No {scope} tickets found.')
+        elif self._active_status:
             self.status.set(f'{count} {self._active_status} ticket{"s" if count != 1 else ""} '
                             f'{"matched the search" if self._active_search else "loaded"}.'
                             if count else f'No {self._active_status} tickets '
