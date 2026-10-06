@@ -32,6 +32,7 @@ def viewer_without_window():
     viewer._delete_dialog = None
     viewer._technician_window = None
     viewer._history_window = None
+    viewer._notes_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._loading_search = ''
@@ -214,7 +215,8 @@ class GuiConstructionTests(unittest.TestCase):
                                    'Create Ticket': viewer.open_create_ticket,
                                    'Update Ticket': viewer.open_update_ticket,
                                    'Delete Ticket': viewer.open_delete_ticket,
-                                   'View History': viewer.open_ticket_history, 'Refresh': refresh,
+                                   'View History': viewer.open_ticket_history,
+                                   'Ticket Notes': viewer.open_ticket_notes, 'Refresh': refresh,
                                    'Search': viewer.perform_search, 'Clear Search': viewer.clear_search})
         entry.return_value.bind.assert_called_once_with('<Return>', viewer.perform_search)
         tree.assert_called_once()

@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from gui_create_ticket import CreateTicketDialog
 from gui_delete_ticket import DeleteTicketDialog
 from gui_ticket_history import TicketHistoryWindow
+from gui_ticket_notes import TicketNotesWindow
 from gui_technicians import TechnicianManagementWindow
 from gui_update_ticket import UpdateTicketDialog
 from ticket_repository import TicketReadError, get_tickets, search_tickets, validate_ticket_id
@@ -59,6 +60,7 @@ class TicketViewer:
         self._delete_dialog = None
         self._technician_window = None
         self._history_window = None
+        self._notes_window = None
         self._refresh_pending = False
         self._active_search = ''
         self._loading_search = ''
@@ -132,9 +134,12 @@ class TicketViewer:
         self.history_button = ttk.Button(toolbar, text='View History', command=self.open_ticket_history,
                                          style='Helpdesk.TButton')
         self.history_button.grid(row=0, column=4, sticky='e', padx=(0, 10))
+        self.notes_button = ttk.Button(toolbar, text='Ticket Notes', command=self.open_ticket_notes,
+                                       style='Helpdesk.TButton')
+        self.notes_button.grid(row=0, column=5, sticky='e', padx=(0, 10))
         self.refresh_button = ttk.Button(toolbar, text='Refresh', command=self.refresh_tickets,
                                          style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=5, sticky='e')
+        self.refresh_button.grid(row=0, column=6, sticky='e')
 
         search_area = ttk.Frame(content, style='Helpdesk.TFrame')
         search_area.grid(row=2, column=0, sticky='ew', pady=(0, 12))
@@ -235,7 +240,7 @@ class TicketViewer:
             self._display_tickets(tickets)
 
     def open_create_ticket(self):
-        if self._closed:
+        if self._closed or self._focus_notes_dialog():
             return
         for dialog in (self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
@@ -247,7 +252,7 @@ class TicketViewer:
         self._create_dialog = CreateTicketDialog(self.root, self._refresh_after_creation)
 
     def open_update_ticket(self):
-        if self._closed:
+        if self._closed or self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
@@ -261,7 +266,7 @@ class TicketViewer:
         self._update_dialog = UpdateTicketDialog(self.root, int(selection[0]), self._request_refresh)
 
     def open_delete_ticket(self):
-        if self._closed:
+        if self._closed or self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
@@ -281,7 +286,7 @@ class TicketViewer:
         self._delete_dialog = DeleteTicketDialog(self.root, ticket_id, self._refresh_after_deletion)
 
     def open_technician_management(self):
-        if self._closed:
+        if self._closed or self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
@@ -290,7 +295,7 @@ class TicketViewer:
         self._technician_window = TechnicianManagementWindow(self.root)
 
     def open_ticket_history(self):
-        if self._closed:
+        if self._closed or self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
@@ -313,6 +318,41 @@ class TicketViewer:
                 return
             self._history_window.close()
         self._history_window = TicketHistoryWindow(self.root, ticket_id)
+
+    def _focus_notes_dialog(self):
+        if (self._notes_window is not None and self._notes_window.is_open
+                and self._notes_window.has_open_dialog):
+            self._notes_window.focus()
+            return True
+        return False
+
+    def _focus_ticket_dialog(self):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+            if dialog is not None and dialog.is_open:
+                dialog.focus()
+                return True
+        return False
+
+    def open_ticket_notes(self):
+        if self._closed or self._focus_notes_dialog() or self._focus_ticket_dialog():
+            return
+        selection = self.tree.selection()
+        if len(selection) != 1:
+            messagebox.showinfo('Select a Ticket', 'Please select one ticket row before clicking Ticket Notes.',
+                                parent=self.root)
+            return
+        try:
+            ticket_id = int(selection[0])
+            validate_ticket_id(ticket_id)
+        except (TypeError, ValueError):
+            messagebox.showinfo('Select a Ticket', 'Please Refresh and select a valid ticket row.', parent=self.root)
+            return
+        if self._notes_window is not None and self._notes_window.is_open:
+            if self._notes_window.ticket_id == ticket_id:
+                self._notes_window.focus()
+                return
+            self._notes_window.close()
+        self._notes_window = TicketNotesWindow(self.root, ticket_id, self._focus_ticket_dialog)
 
     def _refresh_after_deletion(self, ticket_id):
         if self._closed:
@@ -356,7 +396,8 @@ class TicketViewer:
     def close(self):
         if self._closed:
             return
-        dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window)
+        dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window,
+                   self._notes_window)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()

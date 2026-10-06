@@ -270,7 +270,7 @@ Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and cl
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
 the last successful rows. The GUI supports viewing, creating, searching, updating,
-and deleting tickets, plus technician management and ticket history viewing. The
+and deleting tickets, plus technician management, ticket history, and ticket notes. The
 existing CLI remains available with `python app.py`.
 
 Manual checks:
@@ -664,3 +664,77 @@ Manual checks (use disposable test tickets for changes):
    Create, Search, Update, Delete, Refresh, technician management, and CLI menus.
 10. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Tests require
     no interactive GUI or live database writes.
+
+## Ticket Notes / Comments in the GUI
+
+Select one ticket in the main table and click **Ticket Notes**. A separate window
+shows its Ticket ID, employee, and subject, with notes oldest to newest (Comment ID
+breaks ties at equal timestamps). The table displays Comment ID, Date/Time,
+Technician, and Comment. Select a note to read its complete, multiline text in the
+readonly pane below. Inactive authors' existing notes remain visible. An empty
+list displays `No notes found for this ticket.`
+
+**Add Note** opens a multiline note form with a readonly list of Active technicians.
+Names include technician IDs to distinguish duplicate names. Select an author;
+the existing shared validation trims the note and requires at least three letters
+or numbers, rejecting blank, short, or symbols-only text. Numeric notes such as
+`404` remain valid. With no Active technicians, saving is disabled and a friendly
+message explains how to add or reactivate one. Cancel closes without saving.
+Successful saves show the new Comment ID and automatically refresh the notes.
+The repository also checks that the author is still Active when saving.
+
+**Delete Note** requires exactly one selected note. Its confirmation window
+reloads that note for the selected Ticket ID and shows its Comment ID, technician,
+timestamp, and complete text. Deletion happens only when you click **Permanently
+Delete**. Cancel, Escape, and the window close button keep the note. The existing
+repository rechecks both IDs and deletes at most one comment. Successful deletion
+removes the selected row immediately and automatically refreshes the remaining
+notes. A note already removed elsewhere produces friendly missing-note feedback.
+
+**Refresh** reloads the notes window's original ticket, including its current
+employee and subject, without changing the main ticket search filter. Switching
+the main table selection alone does not retarget the window. Clicking Ticket
+Notes for the same ticket focuses its existing window; selecting another ticket
+and clicking the button replaces it. **Close** closes the notes window. Adding or
+deleting notes changes only comments; ticket status and automatic history remain
+unchanged. The viewer can remain open alongside Ticket History and ticket actions;
+Add/Delete dialogs are modal and prevent overlapping save dialogs.
+
+Reads and writes run in background threads. Database errors show friendly
+feedback, keep existing notes or unsaved text, and permit cancellation and retry.
+Closing the application waits for a pending note write. No schema migration,
+setup command, or new dependency is required for this GUI milestone. Existing CLI
+option **8. Ticket Comments / Notes** uses the same repositories.
+
+Manual checks (use disposable notes for deletion):
+
+1. In Git Bash, run `.venv/Scripts/python.exe gui_app.py`. Click Ticket Notes with
+   no selected ticket; expect a friendly message and no notes window.
+2. Select a test ticket and open Ticket Notes. Check the Ticket ID, employee,
+   subject, four columns, chronological order, scrollbars, and full-text pane.
+   Compare with CLI option **8 → 1**. A ticket without notes shows the empty message.
+3. Click Add Note. Only Active technicians should appear, and typing a new author
+   name must be disabled. Select an author and try blank, spaces, `ab`, `a b`,
+   `!!!`, and emoji-only text. Each should keep the form open without saving.
+4. Save `  Checked network cable.  `, then another multiline troubleshooting note.
+   Expect a success message with the new Comment ID, trimmed text, and an updated
+   list without reopening. Cancel a third note; it must not appear. Verify the
+   ticket status and history count remain unchanged.
+5. Change the author to Inactive through Manage Technicians. Their old notes must
+   still display after Refresh; a new Add Note form must exclude them. Reactivate
+   them and reopen Add Note to verify they are available again. If none are Active,
+   expect friendly feedback and a disabled Save Note button.
+6. Click Delete Note without selecting a note; expect friendly feedback. Select a
+   disposable note and check every confirmation field and its full text. Cancel;
+   it must remain. Repeat and click Permanently Delete; only that note should
+   disappear and success should be displayed. Other tickets' notes, ticket status,
+   and history must remain unchanged. CLI **8 → 1** should show the same result.
+7. Keep a ticket search active, add/delete a note, and verify the search and main
+   ticket table are preserved. Refresh the notes after a CLI note change. Selecting
+   another main-table ticket alone must keep the notes window on its original ID.
+8. If MySQL is unavailable, Refresh should retain old notes with friendly feedback;
+   saving/deleting should report errors without closing or crashing. Restore MySQL
+   and retry. Close and reopen the notes window and verify all existing GUI/CLI
+   features still work.
+9. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Automated tests
+   need neither an interactive GUI session nor live database changes.
