@@ -903,19 +903,10 @@ Manual login/logout checks:
    those windows to close, a blank Login screen, and no ticket rows visible. Log
    in again and expect a fresh session with no previous filters. Repeat with an
    account created with the other supported role; verify its permissions below.
-5. For the Inactive test, use your MySQL administrator console to run the following
-   after replacing `YOUR_TEST_USER_ID` with the numeric ID printed during creation:
-
-   ```sql
-   UPDATE helpdesk.users SET status = 'Inactive' WHERE user_id = YOUR_TEST_USER_ID;
-   ```
-
-   Log out and attempt login with that account's correct password; expect the same
-   generic invalid-credentials message. Restore the test account afterward:
-
-   ```sql
-   UPDATE helpdesk.users SET status = 'Active' WHERE user_id = YOUR_TEST_USER_ID;
-   ```
+5. For the Inactive test, sign in as another Active Admin and use **Manage Users**
+   to deactivate a disposable test account. Log out and attempt login with the
+   inactive account's correct password; expect the same generic invalid-credentials
+   message. Sign in with the remaining Active Admin and reactivate the test account.
 
 6. Using an Admin account, check GUI Create, Search, Update, Delete, technician
    management, history, notes, dashboard, and Refresh. Cancel unsaved forms and verify logout safely
@@ -943,8 +934,10 @@ Login. No database migration or new dependency is required.
 | Delete Ticket | Allowed | Disabled |
 | Manage Technicians (including add/status changes) | Allowed | Disabled |
 | Delete Note | Allowed | Disabled |
+| Manage Users (view accounts/change status) | Allowed | Hidden |
 
-Disabled actions remain visible for a consistent layout. Restricted main-window
+Delete Ticket, Manage Technicians, and Delete Note remain visible but disabled for
+Technicians. Manage Users is hidden entirely. Restricted main-window
 and notes handlers also check permissions before opening their dialogs. Delete
 confirmations, technician forms, and their database workers check again before
 calling the existing repositories. A blocked handler displays
@@ -1042,19 +1035,10 @@ Manual checks from Git Bash:
 2. An Active Admin with the correct password should open the creation form
    without entering the main Help Desk GUI. Verify password masking at every
    step. An Inactive Admin must fail with the same generic message. To test this,
-   use a disposable Admin created in step 5 and your MySQL administrator console:
-
-   ```sql
-   SELECT user_id, username, role, status FROM helpdesk.users ORDER BY user_id;
-   UPDATE helpdesk.users SET status = 'Inactive' WHERE user_id = YOUR_TEST_ADMIN_ID;
-   ```
-
-   Replace `YOUR_TEST_ADMIN_ID` with that disposable account's numeric ID. Test
-   its correct credentials in Create Account, then restore it afterward:
-
-   ```sql
-   UPDATE helpdesk.users SET status = 'Active' WHERE user_id = YOUR_TEST_ADMIN_ID;
-   ```
+   use a disposable Admin created in step 5. Sign in as your other Active Admin,
+   deactivate the disposable Admin through **Manage Users**, then log out and
+   test its correct credentials in Create Account. Sign in with the remaining
+   Active Admin and reactivate the disposable account afterward.
 3. Test blank/whitespace username, blank/numeric/symbol-only name, blank password,
    and mismatched confirmation. No account should be created, and the form
    should stay open. Verify the role combobox permits only Admin and Technician.
@@ -1082,5 +1066,78 @@ Manual checks from Git Bash:
 
    ```bash
    .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_gui_create_account.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests -v
+   ```
+
+## Admin User Management in the GUI
+
+After Admin login, **Manage Users** appears in the main header. Technician
+sessions do not display this button, and direct handler calls also check the
+session permission. The separate window shows User ID, Username, Full Name,
+Role, Status, and Created At, with Refresh, Change User Status, and Close.
+Inactive users remain visible. Repository reads select only public fields;
+passwords and password hashes are never loaded into this window.
+
+Select one user and click Change User Status. The dialog loads fresh account
+information and offers only Active or Inactive in a readonly combobox. Save asks
+for confirmation, defaulting to No. Cancel saves nothing, and selecting the
+current status reports that no change was made. Successful saves refresh the
+user table automatically. Failed reads/writes display friendly feedback.
+
+The repository verifies that the acting account is still an Active Admin on
+every management read and save. Status changes share the account-creation lock,
+so overlapping GUI sessions cannot independently disable the remaining Admins.
+Deactivating the last Active Admin is refused. An Admin also cannot deactivate
+their own logged-in account, even when another Active Admin exists. These checks
+run before any status UPDATE. Other Admins may be deactivated when an Active
+Admin remains. Inactive accounts fail existing login authentication; reactivating
+them permits login again with their existing password.
+
+Logout closes the management window and revokes its session permissions. A user
+status save already in progress must finish first. New logins recalculate button
+visibility, including Admin → Technician → Admin in the same program. Existing
+Create Account, CLI, and the administrator/fallback `manage_users.py` keep working.
+No migration, password change, username/role editing, or user deletion is added.
+
+Manual checks from the project directory in Git Bash:
+
+1. Have an Active Admin account A, a disposable Admin B, and a disposable
+   Technician T. If needed, create B/T using the existing Login → Create Account
+   flow, authorizing with A and choosing your own usernames/passwords. Launch:
+
+   ```bash
+   .venv/Scripts/python.exe gui_app.py
+   ```
+
+2. Log in as A. Click Manage Users. Verify all six columns, including Inactive
+   accounts, and no password/hash columns. Click Refresh. Without selecting a
+   row, click Change User Status; expect a friendly selection message.
+3. Select T, choose Inactive, and click Save Changes. Choose No in confirmation;
+   T must stay Active. Repeat and confirm Yes. Expect success and an automatically
+   refreshed Inactive row. Close management, Logout, and try T's correct
+   credentials; expect `Invalid username or password.`
+4. Log in as A, reopen Manage Users, and reactivate T with confirmation. Logout
+   and log in as T; login should work. Verify Manage Users is absent and the
+   existing Technician actions still work. Logout and log in as A again; Manage
+   Users must reappear.
+5. While A/B are both Active, select A and try Inactive with confirmation. Expect
+   `You cannot deactivate your own account while logged in.` A must remain
+   Active. Then select B and deactivate with confirmation; this is allowed while
+   A remains Active. Reactivate B afterward and verify B can log in again.
+6. Test last-Admin protection on a test installation where A is the only Active
+   Admin (or when this is already true). Select A, choose Inactive, Save, and
+   confirm. Expect `Cannot deactivate the last Active Admin account. At least
+   one Active Admin must remain.` Refresh and verify A remains Active. Preserve
+   your other real Admin accounts when choosing a test setup.
+7. Leave an unsaved status dialog open and test Cancel/Close. Verify no status
+   changed. Test Logout with management open: the window should close and the
+   next session should receive its own permissions. Existing ticket CRUD,
+   dashboard, technicians, history, notes, and Refresh must still work.
+8. Run the automated checks, including direct handler/worker attempts and
+   simultaneous Admin deactivations, without changing live data:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_user_management.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_gui_users.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests -v
    ```

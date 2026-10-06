@@ -8,6 +8,7 @@ from password_security import DUMMY_PASSWORD_HASH, PasswordHashError, hash_passw
 
 
 USER_ROLES = ('Admin', 'Technician')
+USER_STATUSES = ('Active', 'Inactive')
 PUBLIC_USER_FIELDS = ('user_id', 'username', 'full_name', 'role', 'status', 'created_at')
 CREATE_USERS_SQL = (Path(__file__).parent / 'database' / 'users.sql').read_text(encoding='utf-8').strip()
 CONFIGURATION_MESSAGE = 'Check your environment settings. DB_NAME must be helpdesk and all required connection settings must be supplied.'
@@ -27,7 +28,19 @@ class UserAuthenticationError(Exception):
 
 
 class UserReadError(Exception):
-    """A safe error when the GUI cannot determine whether accounts exist."""
+    """A safe error when application users cannot be read."""
+
+
+class UserUpdateError(Exception):
+    """A safe error when an account status change cannot be confirmed."""
+
+
+class UserManagementPermissionError(Exception):
+    """The acting account is no longer an Active Admin."""
+
+
+class UserStatusChangeError(UserUpdateError):
+    """A status change would disable the current or last Active Admin."""
 
 
 class UserAuthorizationError(UserCreateError):
@@ -79,6 +92,109 @@ def validate_user_details(username, full_name, role):
 def public_user(user):
     """Return session data without a password or password hash."""
     return {field: user.get(field) for field in PUBLIC_USER_FIELDS}
+
+
+def validate_user_id(user_id):
+    if type(user_id) is not int or not 1 <= user_id <= 2147483647:
+        raise ValueError('User ID must be a positive number up to 2147483647.')
+
+
+def _require_active_admin(cursor, acting_user_id, for_update=False):
+    cursor.execute(
+        'SELECT user_id, role, status FROM helpdesk.users WHERE user_id = %s LIMIT 1'
+        + (' FOR UPDATE' if for_update else ''),
+        (acting_user_id,),
+    )
+    actor = cursor.fetchone()
+    if actor is None or actor['role'] != 'Admin' or actor['status'] != 'Active':
+        raise UserManagementPermissionError('You do not have permission to perform this action.')
+
+
+def get_users(acting_user_id):
+    """Only Active Admins may read users; never select passwords or hashes."""
+    return _read_users(acting_user_id)
+
+
+def get_user(user_id, acting_user_id):
+    validate_user_id(user_id)
+    users = _read_users(acting_user_id, user_id)
+    return users[0] if users else None
+
+
+def _read_users(acting_user_id, user_id=None):
+    validate_user_id(acting_user_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor(dictionary=True) as cursor:
+                _require_active_admin(cursor, acting_user_id)
+                cursor.execute(
+                    'SELECT user_id, username, full_name, role, status, created_at FROM helpdesk.users '
+                    + ('ORDER BY user_id' if user_id is None else 'WHERE user_id = %s LIMIT 1'),
+                    () if user_id is None else (user_id,),
+                )
+                return [public_user(user) for user in cursor.fetchall()]
+    except ValueError:
+        raise UserReadError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno == 1146:
+            raise UserReadError(SETUP_MESSAGE) from None
+        raise UserReadError('Unable to load application users. Please check the database connection and try again.') from None
+
+
+def update_user_status(user_id, status, acting_user_id):
+    """Update one status with serialized checks for actor, self, and last Admin."""
+    validate_user_id(user_id)
+    validate_user_id(acting_user_id)
+    status = validate_text(status, 'Status', 20)
+    if status not in USER_STATUSES:
+        raise ValueError('User status must be Active or Inactive.')
+    try:
+        with get_connection() as connection:
+            try:
+                with connection.cursor(dictionary=True) as cursor:
+                    # Share the creation lock; connection.close releases it on every exit.
+                    cursor.execute('SELECT GET_LOCK(%s, %s) AS acquired', ('helpdesk.users.create', 5))
+                    if cursor.fetchone()['acquired'] != 1:
+                        raise UserUpdateError('User management is busy. Please try again.')
+                    _require_active_admin(cursor, acting_user_id, for_update=True)
+                    cursor.execute(
+                        'SELECT user_id, role, status FROM helpdesk.users WHERE user_id = %s FOR UPDATE',
+                        (user_id,),
+                    )
+                    current = cursor.fetchone()
+                    if current is None:
+                        raise UserUpdateError('No user found with that ID.')
+                    if current['status'] == status:
+                        connection.rollback()
+                        return False
+                    if status == 'Inactive':
+                        if current['role'] == 'Admin' and current['status'] == 'Active':
+                            cursor.execute(
+                                'SELECT COUNT(*) AS active_admins FROM helpdesk.users WHERE role = %s AND status = %s',
+                                ('Admin', 'Active'),
+                            )
+                            if cursor.fetchone()['active_admins'] <= 1:
+                                raise UserStatusChangeError('Cannot deactivate the last Active Admin account. '
+                                                            'At least one Active Admin must remain.')
+                        if user_id == acting_user_id:
+                            raise UserStatusChangeError('You cannot deactivate your own account while logged in.')
+                    cursor.execute('UPDATE helpdesk.users SET status = %s WHERE user_id = %s LIMIT 1', (status, user_id))
+                    if cursor.rowcount != 1:
+                        raise UserUpdateError('No user status change was confirmed. Please Refresh and try again.')
+                connection.commit()
+                return True
+            except (mysql.connector.Error, UserUpdateError, UserManagementPermissionError):
+                try:
+                    connection.rollback()
+                except mysql.connector.Error:
+                    pass
+                raise
+    except ValueError:
+        raise UserUpdateError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno == 1146:
+            raise UserUpdateError(SETUP_MESSAGE) from None
+        raise UserUpdateError('User status change could not be confirmed. Use Refresh to check the account before retrying.') from None
 
 
 def setup_users_table():

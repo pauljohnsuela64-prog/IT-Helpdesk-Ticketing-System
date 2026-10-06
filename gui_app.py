@@ -14,6 +14,7 @@ from gui_ticket_history import TicketHistoryWindow
 from gui_ticket_notes import TicketNotesWindow
 from gui_technicians import TechnicianManagementWindow
 from gui_update_ticket import UpdateTicketDialog
+from gui_users import UserManagementWindow
 from ticket_repository import STATUSES, TicketReadError, get_tickets, search_tickets, validate_ticket_id
 from user_repository import public_user
 
@@ -66,6 +67,7 @@ class TicketViewer:
         self._update_dialog = None
         self._delete_dialog = None
         self._technician_window = None
+        self._user_window = None
         self._history_window = None
         self._notes_window = None
         self._refresh_pending = False
@@ -126,6 +128,11 @@ class TicketViewer:
         ttk.Label(header, text='Ticket Management',
                   style='Helpdesk.Subtitle.TLabel').grid(row=1, column=0, sticky='w', pady=(6, 0))
         header.columnconfigure(0, weight=1)
+        self.user_button = None
+        if self.permissions.allows('manage_users'):
+            self.user_button = ttk.Button(header, text='Manage Users', command=self.open_user_management,
+                                          style='Helpdesk.TButton')
+            self.user_button.grid(row=0, column=1, sticky='e', padx=(16, 0), pady=(0, 6))
         self.technician_button = ttk.Button(header, text='Manage Technicians',
                                             command=self.open_technician_management, style='Helpdesk.TButton')
         self.technician_button.grid(row=1, column=1, sticky='e', padx=(16, 0))
@@ -279,7 +286,7 @@ class TicketViewer:
     def open_create_ticket(self):
         if self._closed or self._focus_notes_dialog():
             return
-        for dialog in (self._update_dialog, self._delete_dialog, self._technician_window):
+        for dialog in (self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -291,7 +298,7 @@ class TicketViewer:
     def open_update_ticket(self):
         if self._closed or self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -307,7 +314,7 @@ class TicketViewer:
             return
         if self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -330,17 +337,24 @@ class TicketViewer:
             return
         if self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
         self._technician_window = TechnicianManagementWindow(self.root, on_change=self.dashboard.refresh,
                                                              permissions=self.permissions)
 
+    def open_user_management(self):
+        if self._closed or not require_permission(self.permissions, 'manage_users', self.root):
+            return
+        if self._focus_notes_dialog() or self._focus_ticket_dialog():
+            return
+        self._user_window = UserManagementWindow(self.root, self.user, permissions=self.permissions)
+
     def open_ticket_history(self):
         if self._closed or self._focus_notes_dialog():
             return
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
@@ -370,7 +384,7 @@ class TicketViewer:
         return False
 
     def _focus_ticket_dialog(self):
-        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return True
@@ -451,7 +465,7 @@ class TicketViewer:
         if self._closed:
             return False
         dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window,
-                   self._notes_window)
+                   self._user_window, self._notes_window)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()

@@ -36,7 +36,7 @@ class RolePolicyTests(unittest.TestCase):
     def test_complete_admin_and_technician_permission_matrix(self):
         allowed = ('dashboard', 'view_tickets', 'search_tickets', 'create_ticket', 'update_ticket',
                    'view_history', 'view_notes', 'add_note', 'refresh')
-        restricted = ('delete_ticket', 'manage_technicians', 'delete_note')
+        restricted = ('delete_ticket', 'manage_technicians', 'delete_note', 'manage_users')
         for role in ('Admin', 'Technician'):
             session = policy(role)
             for action in allowed + restricted:
