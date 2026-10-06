@@ -31,6 +31,7 @@ def viewer_without_window():
     viewer._update_dialog = None
     viewer._delete_dialog = None
     viewer._technician_window = None
+    viewer._history_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._loading_search = ''
@@ -212,7 +213,8 @@ class GuiConstructionTests(unittest.TestCase):
         self.assertEqual(buttons, {'Manage Technicians': viewer.open_technician_management,
                                    'Create Ticket': viewer.open_create_ticket,
                                    'Update Ticket': viewer.open_update_ticket,
-                                   'Delete Ticket': viewer.open_delete_ticket, 'Refresh': refresh,
+                                   'Delete Ticket': viewer.open_delete_ticket,
+                                   'View History': viewer.open_ticket_history, 'Refresh': refresh,
                                    'Search': viewer.perform_search, 'Clear Search': viewer.clear_search})
         entry.return_value.bind.assert_called_once_with('<Return>', viewer.perform_search)
         tree.assert_called_once()

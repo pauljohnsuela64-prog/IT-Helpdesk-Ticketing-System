@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from gui_create_ticket import CreateTicketDialog
 from gui_delete_ticket import DeleteTicketDialog
+from gui_ticket_history import TicketHistoryWindow
 from gui_technicians import TechnicianManagementWindow
 from gui_update_ticket import UpdateTicketDialog
 from ticket_repository import TicketReadError, get_tickets, search_tickets, validate_ticket_id
@@ -57,6 +58,7 @@ class TicketViewer:
         self._update_dialog = None
         self._delete_dialog = None
         self._technician_window = None
+        self._history_window = None
         self._refresh_pending = False
         self._active_search = ''
         self._loading_search = ''
@@ -127,9 +129,12 @@ class TicketViewer:
         self.delete_button = ttk.Button(toolbar, text='Delete Ticket', command=self.open_delete_ticket,
                                         style='Helpdesk.TButton')
         self.delete_button.grid(row=0, column=3, sticky='e', padx=(0, 10))
+        self.history_button = ttk.Button(toolbar, text='View History', command=self.open_ticket_history,
+                                         style='Helpdesk.TButton')
+        self.history_button.grid(row=0, column=4, sticky='e', padx=(0, 10))
         self.refresh_button = ttk.Button(toolbar, text='Refresh', command=self.refresh_tickets,
                                          style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=4, sticky='e')
+        self.refresh_button.grid(row=0, column=5, sticky='e')
 
         search_area = ttk.Frame(content, style='Helpdesk.TFrame')
         search_area.grid(row=2, column=0, sticky='ew', pady=(0, 12))
@@ -284,6 +289,31 @@ class TicketViewer:
                 return
         self._technician_window = TechnicianManagementWindow(self.root)
 
+    def open_ticket_history(self):
+        if self._closed:
+            return
+        for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
+            if dialog is not None and dialog.is_open:
+                dialog.focus()
+                return
+        selection = self.tree.selection()
+        if len(selection) != 1:
+            messagebox.showinfo('Select a Ticket', 'Please select one ticket row before clicking View History.',
+                                parent=self.root)
+            return
+        try:
+            ticket_id = int(selection[0])
+            validate_ticket_id(ticket_id)
+        except (TypeError, ValueError):
+            messagebox.showinfo('Select a Ticket', 'Please Refresh and select a valid ticket row.', parent=self.root)
+            return
+        if self._history_window is not None and self._history_window.is_open:
+            if self._history_window.ticket_id == ticket_id:
+                self._history_window.focus()
+                return
+            self._history_window.close()
+        self._history_window = TicketHistoryWindow(self.root, ticket_id)
+
     def _refresh_after_deletion(self, ticket_id):
         if self._closed:
             return
@@ -334,6 +364,8 @@ class TicketViewer:
         for dialog in dialogs:
             if dialog is not None and dialog.is_open:
                 dialog.cancel()
+        if self._history_window is not None and self._history_window.is_open:
+            self._history_window.close()
         self._closed = True
         if self._poll_id is not None:
             self.root.after_cancel(self._poll_id)

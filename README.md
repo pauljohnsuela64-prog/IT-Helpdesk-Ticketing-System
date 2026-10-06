@@ -270,8 +270,8 @@ Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and cl
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
 the last successful rows. The GUI supports viewing, creating, searching, updating,
-and deleting tickets, plus technician management. The existing CLI remains available
-with `python app.py`.
+and deleting tickets, plus technician management and ticket history viewing. The
+existing CLI remains available with `python app.py`.
 
 Manual checks:
 
@@ -599,3 +599,68 @@ Manual checks (use a test technician and disposable tickets):
 10. Check CLI technician actions through option 6, ticket history through option 7,
     and notes through option 8. Run `.venv/Scripts/python.exe -m unittest discover -s
     tests -v`; the tests require no interactive GUI or live database changes.
+
+## Ticket History in the GUI
+
+Select one ticket in the main table, then click **View History** beside the ticket
+controls. With no selection, a friendly message asks you to select a ticket and
+no history window opens. The separate window shows the selected Ticket ID,
+employee name, and subject, followed by a table with Date/Time, Action, and Details.
+Entries follow the existing repository's order: oldest to newest, with History ID
+breaking ties between equal timestamps. The table includes both scrollbars and
+alternating rows. Selecting an activity displays its complete, multiline details
+in a read-only pane below the table.
+
+**Refresh** reloads that window's original Ticket ID, verifies it still exists,
+and reloads its current information and history. It does not follow changes to
+the selected row in the main ticket table. Refresh preserves the selected activity
+when it still exists, and an empty history shows `No history found for this ticket.`
+Database errors preserve previously loaded data and show friendly feedback;
+Refresh becomes available again for recovery. If the ticket was deleted, Refresh
+clears obsolete history and explains that the ticket no longer exists.
+
+The history window is modeless, so it can remain open while you update a ticket
+through the GUI, then Refresh to see the new automatic activity. Clicking View
+History again for the same ticket focuses its existing window; choosing a different
+ticket replaces the history window with one for that ticket. Close, Escape, or the
+window's close button closes it. Closing the main application also closes history
+and cancels pending GUI callbacks. Background reads never update Tkinter widgets
+directly, and late results from a closed window are ignored.
+
+Viewing and refreshing use only the existing `get_ticket` and `get_ticket_history`
+repository functions. They do not write history, change tickets, or create any
+tables. Automatic history logging, the CLI, assignment behavior, and ticket notes
+are unchanged. The main ticket search filter is preserved. No migration, setup
+command, or new dependency is required.
+
+Manual checks (use disposable test tickets for changes):
+
+1. In Git Bash, run `.venv/Scripts/python.exe gui_app.py`. Click View History with
+   no selected row; expect friendly feedback and no new window.
+2. Select a ticket with history and click View History. Check its Ticket ID,
+   employee, subject, and Date/Time, Action, and Details columns. Compare the entries
+   with CLI option 7 and verify that they run oldest to newest.
+3. Select an activity with a long or multiline description update. Verify the full
+   details appear in the lower pane, can be read using its scrollbar, and cannot
+   be edited. Check both table scrollbars and resize the window.
+4. Leave history open, update the same disposable ticket's status, priority, or
+   assignment through the GUI, and confirm the save. Click Refresh in history;
+   expect the new automatic entries without reopening or duplicating rows. Select
+   another main-table ticket without clicking View History; Refresh must still
+   load the history window's original ticket.
+5. Click View History again for the same ticket; it should focus the existing
+   window. Select a different ticket and click View History; the window should now
+   show that ticket rather than old ticket information.
+6. If you have a legacy ticket without history, view it and expect `No history
+   found for this ticket.` Refresh and Close must remain usable. Do not remove
+   existing history merely to test this; the empty state is covered automatically.
+7. Leave history open for a disposable ticket, delete that ticket through the GUI,
+   then Refresh history. Expect cleared rows and friendly missing-ticket feedback.
+8. With MySQL temporarily unavailable, click the history Refresh button. Expect
+   friendly feedback, retained previous rows/details, and no crash. Restore MySQL
+   and Refresh again to verify recovery. Close during a load should remain safe.
+9. Close history with Close, Escape, and its window close button. Reopen it and
+   close the main application; both windows should close. Verify ticket View,
+   Create, Search, Update, Delete, Refresh, technician management, and CLI menus.
+10. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Tests require
+    no interactive GUI or live database writes.
