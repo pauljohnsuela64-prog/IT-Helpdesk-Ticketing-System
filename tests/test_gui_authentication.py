@@ -28,17 +28,19 @@ def login_without_widgets():
     login.username_entry = MagicMock()
     login.password_entry = MagicMock()
     login.login_button = MagicMock()
+    login.create_account_button = MagicMock()
     login.feedback = MagicMock()
     login.on_authenticated = MagicMock()
     login._results = Queue()
     login._authenticating = False
     login._closed = False
     login._poll_id = None
+    login._account_dialog = None
     return login
 
 
 class LoginScreenTests(unittest.TestCase):
-    def test_masked_password_enter_binding_and_only_login_exit_controls(self):
+    def test_masked_password_enter_binding_and_login_create_account_exit_controls(self):
         with ExitStack() as stack:
             for name in ('Style', 'Frame', 'Label'):
                 stack.enter_context(patch.object(login_gui.ttk, name))
@@ -48,7 +50,7 @@ class LoginScreenTests(unittest.TestCase):
             login = login_gui.LoginScreen(MagicMock(), MagicMock())
         self.assertEqual(entries.call_args.kwargs['show'], '*')
         login.password_entry.bind.assert_called_once_with('<Return>', login.attempt_login)
-        self.assertEqual({item.kwargs['text'] for item in buttons.call_args_list}, {'Login', 'Exit'})
+        self.assertEqual({item.kwargs['text'] for item in buttons.call_args_list}, {'Login', 'Create Account', 'Exit'})
 
     def test_attempt_trims_username_preserves_password_clears_field_and_starts_only_one_worker(self):
         login = login_without_widgets()

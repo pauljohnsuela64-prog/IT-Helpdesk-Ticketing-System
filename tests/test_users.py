@@ -33,12 +33,15 @@ class UserRepositoryTests(unittest.TestCase):
         self.addCleanup(self.connect.stop)
 
     def test_creation_trims_fields_saves_only_hash_and_uses_mysql_defaults(self):
+        self.cursor.fetchone.return_value = (1,)
         with patch.object(repo, 'hash_password', return_value=self.stored) as hash_function:
             ident = repo.create_user("  Test'Account  ", '  Test Operator  ', 'Admin', self.credential)
         self.assertEqual(ident, 7)
         self.assertTrue(hash_function.call_count == 1)
         self.assertTrue(hash_function.call_args.args[0] == self.credential)
-        self.assertTrue(self.cursor.execute.call_count == 1)
+        self.assertTrue(self.cursor.execute.call_count == 2)
+        self.assertEqual(self.cursor.execute.call_args_list[0].args,
+                         ('SELECT GET_LOCK(%s, %s)', ('helpdesk.users.create', 5)))
         sql, params = self.cursor.execute.call_args.args
         self.assertTrue(sql == 'INSERT INTO helpdesk.users (username, password_hash, full_name, role) VALUES (%s, %s, %s, %s)')
         self.assertTrue(params == ("Test'Account", self.stored, 'Test Operator', 'Admin'))
@@ -68,6 +71,7 @@ class UserRepositoryTests(unittest.TestCase):
                     self.assertIn('username already exists', str(caught.exception))
                 self.connection.commit.assert_not_called()
         self.cursor.execute.side_effect = None
+        self.cursor.fetchone.return_value = (1,)
         self.connection.commit.side_effect = mysql.connector.Error(errno=2013)
         with patch.object(repo, 'hash_password', return_value=self.stored), self.assertRaises(repo.UserCreateError):
             repo.create_user('test_account', 'Test Operator', 'Admin', self.credential)

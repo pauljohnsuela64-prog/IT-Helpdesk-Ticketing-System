@@ -259,8 +259,9 @@ From the project directory in Git Bash, launch the separate Tkinter application:
 ```
 
 With your Python environment already active, `python gui_app.py` also works.
-The GUI now opens the Login screen first. Create the users table and your initial
-account using the Authentication Foundation instructions below before signing in.
+The GUI now opens the Login screen first. With the users table already set up,
+use Create Account to create the first Admin or authorize another account with
+an existing Active Admin. The administrator CLI fallback remains available.
 Tkinter and ttk are included with the project's Windows Python installation;
 no additional GUI package or database migration is needed. The viewer uses the
 existing `.env` settings and accepts only `DB_NAME=helpdesk` through the shared
@@ -814,8 +815,8 @@ Manual checks (use disposable tickets for changes):
 ## Authentication Foundation / GUI Login
 
 The GUI entry point now opens a **Login** screen before loading any tickets or
-dashboard data. Sign in using an Active application account created by
-`manage_users.py`. Username input is trimmed; password input is masked and retains
+dashboard data. Sign in using an Active application account created through
+Login's **Create Account** flow or `manage_users.py`. Username input is trimmed; password input is masked and retains
 its exact characters, including surrounding spaces. Click Login or press Enter
 in the password field. Unknown usernames, incorrect passwords, and Inactive
 accounts all display `Invalid username or password.` Database errors display safe
@@ -860,7 +861,9 @@ directory; adjust host/port if your helpdesk database uses a different server.
 The SQL file contains no account inserts or credentials and safely tolerates
 an existing users table.
 
-Create your first application account interactively in Git Bash:
+The Login screen can now create accounts as described below. The existing
+administrator/fallback tool still creates application accounts interactively
+in Git Bash:
 
 ```bash
 winpty .venv/Scripts/python.exe manage_users.py
@@ -990,3 +993,94 @@ Manual permission checks (run from the project directory in Git Bash):
 
 8. Launch `.venv/Scripts/python.exe app.py` and confirm the existing CLI menus and
    operations still work independently.
+
+## Create Account from GUI Login
+
+Click **Create Account** on Login. The dialog first counts every row in
+`helpdesk.users`, including Inactive users. If the count is zero, it displays the
+account form with Role fixed to **Admin**. With any existing account, it first
+asks for an Active Admin's username and masked password. Unknown usernames,
+wrong passwords, Technician accounts, and Inactive Admins all receive the same
+friendly authorization failure. Authorization does not log the Admin in.
+
+After authorization, enter Username, Full Name, Role (Admin or Technician),
+Password, and Confirm Password. The role combobox is readonly. Existing user
+validation and salted scrypt hashing are reused. Usernames must be unique, names
+must contain a letter, passwords cannot be blank, and confirmation must match
+exactly. Usernames/names are trimmed; passwords retain their exact characters.
+Password fields are masked and cleared after submission. No credentials or
+hashes are displayed or printed. New accounts use MySQL's Active status default.
+
+Creation uses the same repository insert as the fallback tool, with additional
+GUI authorization checks. A database lock serializes account creation across
+GUI windows and the fallback tool. The user count is checked again at save time:
+if another account was created while a first-account form was open, that form
+cannot create another account without Admin authorization. The repository also
+checks that the authorizing user is still an Active Admin when saving. If
+authorization is no longer valid, cancel and reopen Create Account to authorize
+again. Authorization is discarded when the dialog closes.
+
+Success displays `Account created successfully.`, closes the dialog, and leaves
+Login open. Sign in explicitly using the new account. Cancel saves nothing;
+repeated Create Account clicks focus the existing dialog. Login and account
+creation cannot start concurrently. Database operations and hashing run in
+background workers. Database errors keep the form available for correction or
+retry. Cancel/Exit wait for an account save already in progress to finish.
+
+No schema migration or additional dependency is required. Existing Login,
+Logout, role permissions, the Help Desk GUI, and CLI behavior remain available.
+`manage_users.py` retains its administrator/fallback role and does not require
+GUI authorization.
+
+Manual checks from Git Bash:
+
+1. Launch `.venv/Scripts/python.exe gui_app.py`. Click Create Account. On your
+   existing installation, expect an Admin authorization form. Test an unknown
+   username, a wrong Admin password, and a Technician account's correct
+   credentials. All must show the same authorization failure and keep the
+   creation form closed.
+2. An Active Admin with the correct password should open the creation form
+   without entering the main Help Desk GUI. Verify password masking at every
+   step. An Inactive Admin must fail with the same generic message. To test this,
+   use a disposable Admin created in step 5 and your MySQL administrator console:
+
+   ```sql
+   SELECT user_id, username, role, status FROM helpdesk.users ORDER BY user_id;
+   UPDATE helpdesk.users SET status = 'Inactive' WHERE user_id = YOUR_TEST_ADMIN_ID;
+   ```
+
+   Replace `YOUR_TEST_ADMIN_ID` with that disposable account's numeric ID. Test
+   its correct credentials in Create Account, then restore it afterward:
+
+   ```sql
+   UPDATE helpdesk.users SET status = 'Active' WHERE user_id = YOUR_TEST_ADMIN_ID;
+   ```
+3. Test blank/whitespace username, blank/numeric/symbol-only name, blank password,
+   and mismatched confirmation. No account should be created, and the form
+   should stay open. Verify the role combobox permits only Admin and Technician.
+4. Create a Technician account with a fresh username and your own password.
+   Expect exactly `Account created successfully.` and a return to Login without
+   automatic sign-in. Log in with the new account and verify Technician
+   restrictions; logout afterward.
+5. Authorize again and try the same username; expect the duplicate message and
+   an open form. Then create another Admin with a fresh username. Sign in and
+   verify full Admin access. Test Cancel before saving and confirm that the
+   cancelled username cannot log in.
+6. First-account bootstrap is only applicable when `helpdesk.users` is already
+   empty. Test this on a separate test MySQL instance with an empty helpdesk
+   database, preserving your existing users. Expect no authorization prompt,
+   Role fixed to Admin, and a successful first Admin account. Opening a second
+   first-account form before the first is saved must not bypass authorization
+   after that first account exists; cancel/reopen the second form to authorize.
+7. Test temporary database unavailability: account counting/authorization/saving
+   should show friendly errors without allowing unauthenticated creation or
+   crashing. Restore the connection and retry. Existing login/logout and the
+   fallback command `winpty .venv/Scripts/python.exe manage_users.py` should still
+   work.
+8. Run the automated checks, which cover Inactive Admin rejection and first-
+   account races without modifying live data:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_gui_create_account.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests -v
+   ```

@@ -4,6 +4,7 @@ from threading import Thread
 import tkinter as tk
 from tkinter import ttk
 
+from gui_create_account import CreateAccountDialog
 from input_validation import validate_text
 from password_security import validate_password
 from user_repository import UserAuthenticationError, authenticate_user, public_user
@@ -20,6 +21,7 @@ class LoginScreen:
         self._authenticating = False
         self._closed = False
         self._poll_id = None
+        self._account_dialog = None
         root.title('Login — IT Help Desk Ticketing System')
         root.geometry('540x430')
         root.minsize(460, 380)
@@ -59,10 +61,13 @@ class LoginScreen:
         buttons = ttk.Frame(self.content, style='Login.TFrame')
         buttons.grid(row=7, column=0, sticky='ew')
         buttons.columnconfigure(0, weight=1)
+        self.create_account_button = ttk.Button(buttons, text='Create Account', command=self.open_create_account,
+                                                style='Login.TButton')
+        self.create_account_button.grid(row=0, column=1, padx=(0, 10))
         self.login_button = ttk.Button(buttons, text='Login', command=self.attempt_login, style='Login.TButton')
-        self.login_button.grid(row=0, column=1, padx=(0, 10))
+        self.login_button.grid(row=0, column=2, padx=(0, 10))
         self.exit_button = ttk.Button(buttons, text='Exit', command=self.close, style='Login.TButton')
-        self.exit_button.grid(row=0, column=2)
+        self.exit_button.grid(row=0, column=3)
         self.username_entry.focus_set()
 
     def _set_busy(self, busy):
@@ -70,9 +75,22 @@ class LoginScreen:
         for widget in (self.username_entry, self.password_entry):
             widget.configure(state='disabled' if busy else 'normal')
         self.login_button.state(['disabled'] if busy else ['!disabled'])
+        self.create_account_button.state(['disabled'] if busy else ['!disabled'])
+
+    def open_create_account(self):
+        if self._closed or self._authenticating:
+            return
+        if self._account_dialog is not None and self._account_dialog.is_open:
+            self._account_dialog.focus()
+            return
+        self.password.set('')
+        self._account_dialog = CreateAccountDialog(self.root)
 
     def attempt_login(self, event=None):
         if self._closed or self._authenticating:
+            return 'break'
+        if self._account_dialog is not None and self._account_dialog.is_open:
+            self._account_dialog.focus()
             return 'break'
         username, password = self.username.get().strip(), self.password.get()
         self.password.set('')
@@ -122,6 +140,8 @@ class LoginScreen:
         """Remove this screen without destroying the application's Tk root."""
         if self._closed:
             return
+        if self._account_dialog is not None and self._account_dialog.is_open:
+            self._account_dialog.cancel()
         self._closed = True
         self.username.set('')
         self.password.set('')
@@ -132,5 +152,8 @@ class LoginScreen:
 
     def close(self):
         if not self._closed:
+            if self._account_dialog is not None and self._account_dialog.is_open and self._account_dialog.is_saving:
+                self._account_dialog.focus()
+                return
             self.dispose()
             self.root.destroy()

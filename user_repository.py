@@ -26,6 +26,47 @@ class UserAuthenticationError(Exception):
     """A safe database or hashing error, distinct from invalid credentials."""
 
 
+class UserReadError(Exception):
+    """A safe error when the GUI cannot determine whether accounts exist."""
+
+
+class UserAuthorizationError(UserCreateError):
+    """GUI creation requires a newly authorized Active Admin."""
+
+
+class _AccountAuthorization:
+    """Proof of authentication for one dialog; contains no password or hash."""
+
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.active = True
+
+    def revoke(self):
+        self.active = False
+
+
+def authorize_account_creation(username, password):
+    user = authenticate_user(username, password)
+    if user is None or user['role'] != 'Admin' or user['status'] != 'Active':
+        return None
+    return _AccountAuthorization(user['user_id'])
+
+
+def get_user_count():
+    """Count all application users, including Inactive accounts."""
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT COUNT(*) FROM helpdesk.users')
+                return cursor.fetchone()[0]
+    except ValueError:
+        raise UserReadError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno == 1146:
+            raise UserReadError(SETUP_MESSAGE) from None
+        raise UserReadError('Unable to check application accounts. Please check the database connection and try again.') from None
+
+
 def validate_user_details(username, full_name, role):
     username = validate_text(username, 'Username', 50)
     full_name = validate_text(full_name, 'Full name', 100)
@@ -55,6 +96,16 @@ def setup_users_table():
 
 
 def create_user(username, full_name, role, password):
+    """Administrator/fallback tool; retain its existing unrestricted creation API."""
+    return _create_user(username, full_name, role, password, administrator_tool=True)
+
+
+def create_account(username, full_name, role, password, authorization=None):
+    """GUI creation: bootstrap an Admin, otherwise require verified authorization."""
+    return _create_user(username, full_name, role, password, authorization=authorization)
+
+
+def _create_user(username, full_name, role, password, authorization=None, administrator_tool=False):
     username, full_name, role = validate_user_details(username, full_name, role)
     validate_password(password)
     try:
@@ -65,6 +116,25 @@ def create_user(username, full_name, role, password):
         with get_connection() as connection:
             try:
                 with connection.cursor() as cursor:
+                    # The connection closes (and releases this lock) on every exit.
+                    # The fallback tool shares the lock, so it cannot race GUI bootstrap.
+                    cursor.execute('SELECT GET_LOCK(%s, %s)', ('helpdesk.users.create', 5))
+                    if cursor.fetchone()[0] != 1:
+                        raise UserCreateError('Account creation is busy. Please try again.')
+                    if not administrator_tool:
+                        cursor.execute('SELECT COUNT(*) FROM helpdesk.users')
+                        if cursor.fetchone()[0] == 0:
+                            role = 'Admin'
+                        else:
+                            if not isinstance(authorization, _AccountAuthorization) or not authorization.active:
+                                raise UserAuthorizationError('Admin authorization is required. Cancel and reopen Create Account.')
+                            cursor.execute(
+                                'SELECT user_id FROM helpdesk.users '
+                                'WHERE user_id = %s AND role = %s AND status = %s LIMIT 1 FOR UPDATE',
+                                (authorization.user_id, 'Admin', 'Active'),
+                            )
+                            if cursor.fetchone() is None:
+                                raise UserAuthorizationError('Admin authorization is required. Cancel and reopen Create Account.')
                     cursor.execute(
                         'INSERT INTO helpdesk.users (username, password_hash, full_name, role) '
                         'VALUES (%s, %s, %s, %s)',
@@ -73,7 +143,7 @@ def create_user(username, full_name, role, password):
                     user_id = cursor.lastrowid
                 connection.commit()
                 return user_id
-            except mysql.connector.Error:
+            except (mysql.connector.Error, UserCreateError):
                 try:
                     connection.rollback()
                 except mysql.connector.Error:
