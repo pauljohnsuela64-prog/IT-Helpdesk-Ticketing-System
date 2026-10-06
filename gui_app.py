@@ -9,6 +9,7 @@ from gui_create_ticket import CreateTicketDialog
 from gui_dashboard import DashboardPanel
 from gui_session import HelpDeskApplication
 from gui_delete_ticket import DeleteTicketDialog
+from gui_permissions import SessionPermissions, require_permission
 from gui_ticket_history import TicketHistoryWindow
 from gui_ticket_notes import TicketNotesWindow
 from gui_technicians import TechnicianManagementWindow
@@ -55,6 +56,7 @@ class TicketViewer:
     def __init__(self, root, user=None, on_logout=None):
         self.root = root
         self.user = public_user(user) if user is not None else None
+        self.permissions = SessionPermissions(self.user)
         self._on_logout = on_logout
         self._results = Queue()
         self._loading = False
@@ -127,6 +129,8 @@ class TicketViewer:
         self.technician_button = ttk.Button(header, text='Manage Technicians',
                                             command=self.open_technician_management, style='Helpdesk.TButton')
         self.technician_button.grid(row=1, column=1, sticky='e', padx=(16, 0))
+        if not self.permissions.allows('manage_technicians'):
+            self.technician_button.state(['disabled'])
         if self.user is not None:
             name = ''.join(character if character.isprintable() else ' ' for character in self.user['full_name'])
             ttk.Label(header, text=f'Logged in as: {name} ({self.user["role"]})', wraplength=730,
@@ -152,6 +156,8 @@ class TicketViewer:
         self.delete_button = ttk.Button(toolbar, text='Delete Ticket', command=self.open_delete_ticket,
                                         style='Helpdesk.TButton')
         self.delete_button.grid(row=0, column=3, sticky='e', padx=(0, 10))
+        if not self.permissions.allows('delete_ticket'):
+            self.delete_button.state(['disabled'])
         self.history_button = ttk.Button(toolbar, text='View History', command=self.open_ticket_history,
                                          style='Helpdesk.TButton')
         self.history_button.grid(row=0, column=4, sticky='e', padx=(0, 10))
@@ -297,7 +303,9 @@ class TicketViewer:
         self._update_dialog = UpdateTicketDialog(self.root, int(selection[0]), self._request_refresh)
 
     def open_delete_ticket(self):
-        if self._closed or self._focus_notes_dialog():
+        if self._closed or not require_permission(self.permissions, 'delete_ticket', self.root):
+            return
+        if self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
@@ -314,16 +322,20 @@ class TicketViewer:
         except (TypeError, ValueError):
             messagebox.showinfo('Select a Ticket', 'Please Refresh and select a valid ticket row.', parent=self.root)
             return
-        self._delete_dialog = DeleteTicketDialog(self.root, ticket_id, self._refresh_after_deletion)
+        self._delete_dialog = DeleteTicketDialog(self.root, ticket_id, self._refresh_after_deletion,
+                                                permissions=self.permissions)
 
     def open_technician_management(self):
-        if self._closed or self._focus_notes_dialog():
+        if self._closed or not require_permission(self.permissions, 'manage_technicians', self.root):
+            return
+        if self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window):
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
-        self._technician_window = TechnicianManagementWindow(self.root, on_change=self.dashboard.refresh)
+        self._technician_window = TechnicianManagementWindow(self.root, on_change=self.dashboard.refresh,
+                                                             permissions=self.permissions)
 
     def open_ticket_history(self):
         if self._closed or self._focus_notes_dialog():
@@ -383,7 +395,8 @@ class TicketViewer:
                 self._notes_window.focus()
                 return
             self._notes_window.close()
-        self._notes_window = TicketNotesWindow(self.root, ticket_id, self._focus_ticket_dialog)
+        self._notes_window = TicketNotesWindow(self.root, ticket_id, self._focus_ticket_dialog,
+                                              permissions=self.permissions)
 
     def _refresh_after_deletion(self, ticket_id):
         if self._closed:
@@ -443,6 +456,7 @@ class TicketViewer:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()
                 return False
+        self.permissions.revoke()
         for dialog in dialogs:
             if dialog is not None and dialog.is_open:
                 dialog.cancel()

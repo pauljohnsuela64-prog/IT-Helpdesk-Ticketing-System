@@ -822,8 +822,8 @@ accounts all display `Invalid username or password.` Database errors display saf
 connection/setup guidance and keep the Login screen open. Exit closes the program.
 
 After successful login, the existing main GUI displays the user's full name and
-role with a **Logout** button. Admin and Technician have the same GUI features in
-this milestone; roles are stored as session information. Logout closes child
+role with a **Logout** button. GUI permissions follow the account's Admin or
+Technician role, as described below. Logout closes child
 windows, clears session state, and returns to an empty Login screen using the
 same application process. Pending ticket/technician/note writes must finish
 before logout; closing a session cancels its pending GUI read callbacks and ignores
@@ -899,7 +899,7 @@ Manual login/logout checks:
 4. Open history and notes, set a ticket search/status filter, then Logout. Expect
    those windows to close, a blank Login screen, and no ticket rows visible. Log
    in again and expect a fresh session with no previous filters. Repeat with an
-   account created with the other supported role; all current features remain.
+   account created with the other supported role; verify its permissions below.
 5. For the Inactive test, use your MySQL administrator console to run the following
    after replacing `YOUR_TEST_USER_ID` with the numeric ID printed during creation:
 
@@ -914,8 +914,8 @@ Manual login/logout checks:
    UPDATE helpdesk.users SET status = 'Active' WHERE user_id = YOUR_TEST_USER_ID;
    ```
 
-6. Check GUI Create, Search, Update, Delete, technician management, history,
-   notes, dashboard, and Refresh. Cancel unsaved forms and verify logout safely
+6. Using an Admin account, check GUI Create, Search, Update, Delete, technician
+   management, history, notes, dashboard, and Refresh. Cancel unsaved forms and verify logout safely
    closes remaining windows. A save already in progress must finish before the
    session can close. The existing CLI must still work independently.
 7. With MySQL temporarily unavailable, try Login; expect friendly connection
@@ -925,3 +925,68 @@ Manual login/logout checks:
 8. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Authentication
    tests generate ephemeral credentials only in memory and use mocked database
    connections; the suite requires no interactive GUI or live database changes.
+
+## GUI Role-Based Access Control
+
+Each login creates a new permission policy from the authenticated account's role.
+Logout revokes that policy, closes the session's child windows, and returns to
+Login. No database migration or new dependency is required.
+
+| GUI action | Admin | Technician |
+| --- | --- | --- |
+| Dashboard, View Tickets, Search, Refresh | Allowed | Allowed |
+| Create Ticket, Update Ticket | Allowed | Allowed |
+| View History, View Notes, Add Note | Allowed | Allowed |
+| Delete Ticket | Allowed | Disabled |
+| Manage Technicians (including add/status changes) | Allowed | Disabled |
+| Delete Note | Allowed | Disabled |
+
+Disabled actions remain visible for a consistent layout. Restricted main-window
+and notes handlers also check permissions before opening their dialogs. Delete
+confirmations, technician forms, and their database workers check again before
+calling the existing repositories. A blocked handler displays
+`You do not have permission to perform this action.` Notes Refresh keeps Delete
+Note disabled for Technicians while leaving Add Note available.
+
+Technician-role accounts may work with any ticket; application users are not
+linked to technician records. Note authors and assignment choices still come
+from Active technician records. Old assignments and notes from Inactive
+technicians remain visible. Existing CLI behavior and repository operations are
+unchanged; these permissions apply to authenticated GUI sessions.
+
+Manual permission checks (run from the project directory in Git Bash):
+
+1. Use an existing Active Admin account and Active Technician account. If either
+   is missing, run `winpty .venv/Scripts/python.exe manage_users.py` to create it
+   interactively with the appropriate role and your own password.
+2. Launch `.venv/Scripts/python.exe gui_app.py` and log in as Admin. Verify
+   `Logged in as: Full Name (Admin)` and enabled Delete Ticket and Manage
+   Technicians buttons. Create a disposable ticket, update it, search for its ID,
+   open its history, and add a test note using an Active technician.
+3. In that ticket's Notes window, select the test note. Delete Note should be
+   enabled. Cancel its confirmation first and verify the note remains, then
+   confirm deletion of that test note. Repeat cancel/confirm with Delete Ticket
+   for the disposable ticket. Verify Refresh updates the table and dashboard.
+   Open Manage Technicians and verify its existing Add and Change Status actions.
+4. Logout and log in as Technician in the same process. Verify the displayed role
+   and disabled Delete Ticket and Manage Technicians buttons. Create another
+   disposable ticket, update it, search using its numeric ID, and view history.
+   Verify an existing ticket assigned to someone else is also available to update.
+5. Open Ticket Notes for the test ticket. Add Note must work using an Active
+   technician; Delete Note must be disabled even after selecting a note and
+   clicking Refresh repeatedly. Verify older notes from Inactive technicians are
+   still visible. Dashboard, ticket Refresh, and Clear Search must still work.
+6. Logout and log in as Admin again without restarting. Delete Ticket, Manage
+   Technicians, and Delete Note must be enabled again. Clean up the disposable
+   ticket created in step 4 as Admin. Repeat the switch to Technician if desired
+   to verify the buttons become disabled again.
+7. Run the automated permission checks, which include direct handler/worker
+   attempts to bypass disabled buttons and revoked-session checks:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_gui_permissions.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests -v
+   ```
+
+8. Launch `.venv/Scripts/python.exe app.py` and confirm the existing CLI menus and
+   operations still work independently.

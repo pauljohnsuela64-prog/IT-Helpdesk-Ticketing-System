@@ -11,6 +11,7 @@ import gui_technicians as tech_gui
 import gui_update_ticket as update_gui
 import technician_repository as repository
 import ticket_repository as tickets
+from gui_permissions import SessionPermissions
 from test_gui_app import viewer_without_window
 
 
@@ -22,6 +23,7 @@ def technician(status='Active', technician_id=12):
 def manager_without_window():
     manager = tech_gui.TechnicianManagementWindow.__new__(tech_gui.TechnicianManagementWindow)
     manager.parent = MagicMock()
+    manager.permissions = SessionPermissions({'role': 'Admin', 'status': 'Active'})
     manager.window = MagicMock()
     manager.tree = MagicMock()
     manager.tree.selection.return_value = ()
@@ -79,7 +81,8 @@ class MainWindowTests(unittest.TestCase):
             viewer.open_technician_management()
             viewer.open_technician_management()
             manager.return_value.focus.assert_called_once_with()
-            manager.assert_called_once_with(viewer.root, on_change=viewer.dashboard.refresh)
+            manager.assert_called_once_with(viewer.root, on_change=viewer.dashboard.refresh,
+                                            permissions=viewer.permissions)
             manager.return_value.is_open = False
             viewer.open_technician_management()
         self.assertEqual(manager.call_count, 2)
@@ -146,7 +149,8 @@ class TechnicianTableTests(unittest.TestCase):
              patch.object(tech_gui.ttk, 'Treeview') as tree, patch.object(tech_gui.ttk, 'Scrollbar') as scrollbar, \
              patch.object(tech_gui.ttk, 'Button') as button, \
              patch.object(tech_gui.TechnicianManagementWindow, 'refresh') as refresh:
-            manager = tech_gui.TechnicianManagementWindow(MagicMock())
+            manager = tech_gui.TechnicianManagementWindow(MagicMock(),
+                                                          permissions=SessionPermissions({'role': 'Admin', 'status': 'Active'}))
         tree.assert_called_once()
         self.assertEqual(tree.call_args.kwargs['columns'],
                          ('technician_id', 'full_name', 'email', 'status', 'created_at'))

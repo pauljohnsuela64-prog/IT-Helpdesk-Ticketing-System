@@ -305,7 +305,8 @@ class TechnicianCallbackTests(unittest.TestCase):
         viewer = viewer_without_window()
         with patch.object(gui, 'TechnicianManagementWindow') as manager:
             viewer.open_technician_management()
-        manager.assert_called_once_with(viewer.root, on_change=viewer.dashboard.refresh)
+        manager.assert_called_once_with(viewer.root, on_change=viewer.dashboard.refresh,
+                                        permissions=viewer.permissions)
 
     def test_add_and_status_save_notify_dashboard_after_success_including_resync_after_noop(self):
         for status_dialog, result in ((False, 42), (True, True), (True, False)):

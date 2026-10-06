@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from input_validation import validate_text
+from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import (
     TECHNICIAN_STATUSES, TechnicianCreateError, TechnicianReadError, TechnicianUpdateError,
     add_technician, get_technician, get_technicians, update_technician_status, validate_technician_id,
@@ -35,8 +36,9 @@ def technician_row_values(technician):
 
 
 class TechnicianManagementWindow:
-    def __init__(self, parent, on_change=None):
+    def __init__(self, parent, on_change=None, permissions=None):
         self.parent = parent
+        self.permissions = permissions if permissions is not None else SessionPermissions()
         self._on_change = on_change
         self._results = Queue()
         self._loading = False
@@ -88,6 +90,9 @@ class TechnicianManagementWindow:
         self.refresh_button.grid(row=0, column=3, padx=(0, 10))
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
         self.close_button.grid(row=0, column=4)
+        if not self.permissions.allows('manage_technicians'):
+            for button in (self.add_button, self.change_button, self.refresh_button):
+                button.state(['disabled'])
         table = ttk.Frame(content)
         table.grid(row=2, column=0, sticky='nsew')
         table.columnconfigure(0, weight=1)
@@ -112,6 +117,8 @@ class TechnicianManagementWindow:
     def refresh(self):
         if self._closed or self._loading:
             return
+        if not require_permission(self.permissions, 'manage_technicians', self.window):
+            return
         self._loading = True
         self.feedback.set('Loading technicians...')
         self.refresh_button.state(['disabled'])
@@ -119,6 +126,9 @@ class TechnicianManagementWindow:
         self._poll_id = self.window.after(100, self._check_refresh)
 
     def _load_technicians(self):
+        if not self.permissions.allows('manage_technicians'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             technicians = get_technicians()
         except TechnicianReadError as error:
@@ -142,7 +152,7 @@ class TechnicianManagementWindow:
             self._refresh_pending = False
             self.refresh()
             return
-        self.refresh_button.state(['!disabled'])
+        self.refresh_button.state(['!disabled'] if self.permissions.allows('manage_technicians') else ['disabled'])
         if error is not None:
             self.feedback.set(f'Unable to load technicians. {error}')
         else:
@@ -182,11 +192,15 @@ class TechnicianManagementWindow:
         return False
 
     def open_add(self):
-        if not self._closed and not self._focus_child():
+        if self._closed or not require_permission(self.permissions, 'manage_technicians', self.window):
+            return
+        if not self._focus_child():
             self._child_dialog = AddTechnicianDialog(self)
 
     def open_status(self):
-        if self._closed or self._focus_child():
+        if self._closed or not require_permission(self.permissions, 'manage_technicians', self.window):
+            return
+        if self._focus_child():
             return
         selection = self.tree.selection()
         if len(selection) != 1:
@@ -354,6 +368,8 @@ class AddTechnicianDialog(_TechnicianDialog):
     def save(self):
         if self._closed or self._saving:
             return
+        if not require_permission(self.manager.permissions, 'manage_technicians', self.window):
+            return
         try:
             full_name = validate_text(self.fields['full_name'].get(), 'Full name', 100)
             email = validate_text(self.fields['email'].get(), 'Email', 150)
@@ -363,6 +379,9 @@ class AddTechnicianDialog(_TechnicianDialog):
         self._start_save(self._add_technician, (full_name, email))
 
     def _add_technician(self, full_name, email):
+        if not self.manager.permissions.allows('manage_technicians'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             technician_id = add_technician(full_name, email)
         except (TechnicianCreateError, ValueError) as error:
@@ -403,6 +422,9 @@ class ChangeTechnicianStatusDialog(_TechnicianDialog):
         self._poll_id = self.window.after(100, self._check_load)
 
     def _load_technician(self):
+        if not self.manager.permissions.allows('manage_technicians'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             technician = get_technician(self.technician_id)
         except (TechnicianReadError, ValueError) as error:
@@ -441,6 +463,8 @@ class ChangeTechnicianStatusDialog(_TechnicianDialog):
     def save(self):
         if self._closed or self._loading or self._saving or self._current is None:
             return
+        if not require_permission(self.manager.permissions, 'manage_technicians', self.window):
+            return
         status = self.status.get()
         if status not in TECHNICIAN_STATUSES:
             self.feedback.set('Choose Active or Inactive.')
@@ -459,6 +483,9 @@ class ChangeTechnicianStatusDialog(_TechnicianDialog):
         self._start_save(self._change_status, (status,))
 
     def _change_status(self, status):
+        if not self.manager.permissions.allows('manage_technicians'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             changed = update_technician_status(self.technician_id, status)
         except (TechnicianUpdateError, ValueError) as error:

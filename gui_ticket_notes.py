@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from input_validation import validate_comment_text
+from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import TechnicianReadError, get_active_technicians
 from ticket_comment_repository import (
     TicketCommentCreateError, TicketCommentDeleteError, TicketCommentReadError,
@@ -44,8 +45,9 @@ def _ticket_summary(ticket_id, ticket):
 class TicketNotesWindow:
     """Modeless notes for one ticket, with modal add/delete forms."""
 
-    def __init__(self, parent, ticket_id, focus_other_dialog=None):
+    def __init__(self, parent, ticket_id, focus_other_dialog=None, permissions=None):
         self.parent = parent
+        self.permissions = permissions if permissions is not None else SessionPermissions()
         self.ticket_id = ticket_id
         self._focus_other_dialog = focus_other_dialog
         self._results = Queue()
@@ -144,8 +146,8 @@ class TicketNotesWindow:
         )
 
     def _enable_actions(self, enabled):
-        for button in (self.add_button, self.delete_button):
-            button.state(['!disabled'] if enabled else ['disabled'])
+        for button, action in ((self.add_button, 'add_note'), (self.delete_button, 'delete_note')):
+            button.state(['!disabled'] if enabled and self.permissions.allows(action) else ['disabled'])
 
     def refresh(self):
         if self._closed or self._loading:
@@ -268,6 +270,8 @@ class TicketNotesWindow:
             self._child_dialog = AddNoteDialog(self)
 
     def open_delete(self):
+        if self._closed or not require_permission(self.permissions, 'delete_note', self.window):
+            return
         if not self._can_open_dialog():
             return
         selection = self.tree.selection()
@@ -535,6 +539,9 @@ class DeleteNoteDialog(_NoteDialog):
         self._poll_id = self.window.after(100, self._check_load)
 
     def _load_data(self):
+        if not self.owner.permissions.allows('delete_note'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             notes = get_ticket_comments(self.ticket_id)
             note = next((note for note in notes if note['comment_id'] == self.comment_id
@@ -567,9 +574,14 @@ class DeleteNoteDialog(_NoteDialog):
         # This button is explicit confirmation; neither loading nor Enter deletes.
         if self._closed or self._loading or self._saving or not self._ready:
             return
+        if not require_permission(self.owner.permissions, 'delete_note', self.window):
+            return
         self._start_save(self._delete_note, (), 'Deleting note...')
 
     def _delete_note(self):
+        if not self.owner.permissions.allows('delete_note'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             deleted = delete_ticket_comment(self.ticket_id, self.comment_id)
         except (TicketCommentDeleteError, ValueError) as error:

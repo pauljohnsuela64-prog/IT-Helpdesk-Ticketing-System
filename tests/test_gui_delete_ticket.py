@@ -8,12 +8,14 @@ import mysql.connector
 import gui_app as gui
 import gui_delete_ticket as delete_gui
 import ticket_repository as repository
+from gui_permissions import SessionPermissions
 from test_gui_app import ticket, viewer_without_window
 
 
 def dialog_without_window():
     dialog = delete_gui.DeleteTicketDialog.__new__(delete_gui.DeleteTicketDialog)
     dialog.parent = MagicMock()
+    dialog.permissions = SessionPermissions({'role': 'Admin', 'status': 'Active'})
     dialog.window = MagicMock()
     dialog.ticket_id = 7
     dialog.on_deleted = MagicMock()
@@ -61,7 +63,8 @@ class ViewerDeletionTests(unittest.TestCase):
             viewer.open_delete_ticket()
             viewer.tree.selection.return_value = ('8',)
             viewer.open_delete_ticket()
-        dialog.assert_called_once_with(viewer.root, 7, viewer._refresh_after_deletion)
+        dialog.assert_called_once_with(viewer.root, 7, viewer._refresh_after_deletion,
+                                       permissions=viewer.permissions)
         dialog.return_value.focus.assert_called_once_with()
 
     def test_open_create_or_update_prevents_a_concurrent_deletion_dialog(self):
@@ -173,7 +176,8 @@ class ConfirmationTests(unittest.TestCase):
              patch.object(delete_gui.tk, 'StringVar'), patch.object(delete_gui.ttk, 'Frame'), \
              patch.object(delete_gui.ttk, 'Label') as label, patch.object(delete_gui.ttk, 'Button') as button, \
              patch.object(delete_gui, 'Thread') as worker, patch.object(delete_gui, 'delete_ticket') as delete:
-            dialog = delete_gui.DeleteTicketDialog(MagicMock(), 7, MagicMock())
+            dialog = delete_gui.DeleteTicketDialog(MagicMock(), 7, MagicMock(),
+                                                   permissions=SessionPermissions({'role': 'Admin', 'status': 'Active'}))
         self.assertEqual([item.kwargs['text'] for item in button.call_args_list], ['Cancel', 'Permanently Delete'])
         self.assertEqual(button.call_args_list[1].kwargs['command'], dialog.confirm_delete)
         texts = ' '.join(item.kwargs.get('text', '') for item in label.call_args_list)

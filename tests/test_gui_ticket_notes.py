@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, call, patch
 import gui_app as gui
 import gui_ticket_notes as notes_gui
 import ticket_comment_repository as repository
+from gui_permissions import SessionPermissions
 from test_gui_app import ticket, viewer_without_window
 
 
@@ -24,6 +25,7 @@ def notes():
 def window_without_widgets():
     window = notes_gui.TicketNotesWindow.__new__(notes_gui.TicketNotesWindow)
     window.parent = MagicMock()
+    window.permissions = SessionPermissions({'role': 'Admin', 'status': 'Active'})
     window.window = MagicMock()
     window.ticket_id = 7
     window.tree = MagicMock()
@@ -101,7 +103,8 @@ class MainNotesTests(unittest.TestCase):
             window.return_value.ticket_id = 7
             viewer.open_ticket_notes()
             viewer.open_ticket_notes()
-            window.assert_called_once_with(viewer.root, 7, viewer._focus_ticket_dialog)
+            window.assert_called_once_with(viewer.root, 7, viewer._focus_ticket_dialog,
+                                           permissions=viewer.permissions)
             window.return_value.focus.assert_called_once_with()
             viewer.tree.selection.return_value = ('8',)
             viewer.open_ticket_notes()
@@ -543,7 +546,8 @@ class WindowLifecycleTests(unittest.TestCase):
             mocks.update({name: stack.enter_context(patch.object(notes_gui.ttk, name))
                           for name in ('Frame', 'Label', 'Treeview', 'Scrollbar', 'Button')})
             refresh = stack.enter_context(patch.object(notes_gui.TicketNotesWindow, 'refresh'))
-            window = notes_gui.TicketNotesWindow(MagicMock(), 7)
+            window = notes_gui.TicketNotesWindow(MagicMock(), 7,
+                                                 permissions=SessionPermissions({'role': 'Admin', 'status': 'Active'}))
         self.assertEqual(mocks['Treeview'].call_args.kwargs['columns'], ('comment_id', 'created_at', 'technician_name', 'comment_text'))
         self.assertEqual(mocks['Treeview'].call_args.kwargs['selectmode'], 'browse')
         self.assertEqual({item.kwargs['text'] for item in mocks['Button'].call_args_list}, {'Add Note', 'Delete Note', 'Refresh', 'Close'})

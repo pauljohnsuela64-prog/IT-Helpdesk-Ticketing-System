@@ -4,6 +4,7 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from ticket_repository import TicketDeleteError, TicketReadError, delete_ticket, get_ticket
 
 
@@ -24,8 +25,9 @@ def deletion_summary(ticket):
 class DeleteTicketDialog:
     """Opening previews the selected ID; only Permanently Delete confirms a write."""
 
-    def __init__(self, parent, ticket_id, on_deleted):
+    def __init__(self, parent, ticket_id, on_deleted, permissions=None):
         self.parent = parent
+        self.permissions = permissions if permissions is not None else SessionPermissions()
         self.ticket_id = ticket_id
         self.on_deleted = on_deleted
         self._results = Queue()
@@ -90,6 +92,9 @@ class DeleteTicketDialog:
 
     def _load_ticket(self):
         """Load fresh details; the worker never accesses Tkinter widgets."""
+        if not self.permissions.allows('delete_ticket'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             ticket = get_ticket(self.ticket_id)
         except (TicketReadError, ValueError) as error:
@@ -118,12 +123,14 @@ class DeleteTicketDialog:
         self._ticket = ticket
         self.summary.set(deletion_summary(ticket))
         self.feedback.set('Choose Cancel to keep this ticket, or Permanently Delete to confirm.')
-        self.delete_button.state(['!disabled'])
+        self.delete_button.state(['!disabled'] if self.permissions.allows('delete_ticket') else ['disabled'])
         self.cancel_button.focus_set()
 
     def confirm_delete(self):
         # This button is the explicit confirmation. Enter is not bound to deletion.
         if self._closed or self._loading or self._deleting or self._ticket is None:
+            return
+        if not require_permission(self.permissions, 'delete_ticket', self.window):
             return
         self._deleting = True
         self.delete_button.state(['disabled'])
@@ -134,6 +141,9 @@ class DeleteTicketDialog:
 
     def _delete_ticket(self):
         """Delete only the immutable selected ID; existing cascades handle notes."""
+        if not self.permissions.allows('delete_ticket'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             deleted = delete_ticket(self.ticket_id)
         except (TicketDeleteError, ValueError) as error:
@@ -156,7 +166,7 @@ class DeleteTicketDialog:
         self._deleting = False
         if error is not None:
             self.feedback.set(error)
-            self.delete_button.state(['!disabled'])
+            self.delete_button.state(['!disabled'] if self.permissions.allows('delete_ticket') else ['disabled'])
             self.cancel_button.state(['!disabled'])
             self.cancel_button.focus_set()
             return

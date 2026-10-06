@@ -186,7 +186,7 @@ class ViewerSessionTests(unittest.TestCase):
         viewer._on_logout = MagicMock()
         return viewer
 
-    def test_logged_in_information_and_logout_available_to_both_roles_without_restrictions(self):
+    def test_logged_in_information_logout_and_existing_controls_available_to_both_roles(self):
         for role in ('Admin', 'Technician'):
             with ExitStack() as stack:
                 for name in ('Style', 'Frame', 'Entry', 'Treeview', 'Scrollbar'):

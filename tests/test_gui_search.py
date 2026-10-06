@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import gui_app as gui
 import ticket_repository as repository
+from gui_permissions import SessionPermissions
 
 
 def ticket(ticket_id=3):
@@ -17,6 +18,7 @@ def ticket(ticket_id=3):
 def viewer_without_window():
     viewer = gui.TicketViewer.__new__(gui.TicketViewer)
     viewer.root = MagicMock()
+    viewer.permissions = SessionPermissions({'role': 'Admin', 'status': 'Active'})
     viewer.tree = MagicMock()
     viewer.tree.selection.return_value = ()
     viewer.tree.get_children.return_value = ('previous-row',)
