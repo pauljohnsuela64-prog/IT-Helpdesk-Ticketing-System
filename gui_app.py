@@ -366,7 +366,9 @@ class TicketViewer:
         self._create_dialog = CreateTicketDialog(self.root, self._refresh_after_creation)
 
     def open_update_ticket(self):
-        if self._closed or self._focus_notes_dialog():
+        if self._closed or not require_permission(self.permissions, 'update_ticket', self.root):
+            return
+        if self._focus_notes_dialog():
             return
         for dialog in (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
@@ -377,7 +379,8 @@ class TicketViewer:
             messagebox.showinfo('Select a Ticket', 'Please select a ticket row before clicking Update Ticket.',
                                 parent=self.root)
             return
-        self._update_dialog = UpdateTicketDialog(self.root, int(selection[0]), self._request_refresh)
+        self._update_dialog = UpdateTicketDialog(self.root, int(selection[0]), self._request_refresh,
+                                                 permissions=self.permissions, user=self.user)
 
     def open_delete_ticket(self):
         if self._closed or not require_permission(self.permissions, 'delete_ticket', self.root):

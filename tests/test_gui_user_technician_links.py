@@ -46,6 +46,8 @@ def link_dialog():
 
 def technician_note_dialog():
     dialog = note_dialog()
+    dialog._ticket = {**dialog._ticket, 'assigned_technician_id': 12}
+    dialog.owner._ticket = dialog._ticket
     dialog.owner.user = {**account('Technician'), 'technician_id': 12}
     dialog.owner.permissions = gui_permissions.SessionPermissions(dialog.owner.user)
     dialog.author = None
@@ -269,7 +271,7 @@ class AutomaticNoteAuthorTests(unittest.TestCase):
 
     def test_technician_loader_reads_current_link_and_does_not_load_author_choices(self):
         dialog = technician_note_dialog()
-        with patch.object(notes_gui, 'get_ticket', return_value=ticket()), \
+        with patch.object(notes_gui, 'get_ticket', return_value={**ticket(), 'assigned_technician_id': 12}), \
              patch.object(notes_gui, 'get_linked_active_technician', return_value=TECHNICIANS[0]) as linked, \
              patch.object(notes_gui, 'get_active_technicians') as choices:
             dialog._load_data()
@@ -281,7 +283,7 @@ class AutomaticNoteAuthorTests(unittest.TestCase):
     def test_missing_or_inactive_link_blocks_note_with_contact_admin_message(self):
         dialog = technician_note_dialog()
         dialog._ready = False
-        with patch.object(notes_gui, 'get_ticket', return_value=ticket()), \
+        with patch.object(notes_gui, 'get_ticket', return_value={**ticket(), 'assigned_technician_id': 12}), \
              patch.object(notes_gui, 'get_linked_active_technician', return_value=None):
             dialog._load_data()
         dialog._check_load()
@@ -299,7 +301,7 @@ class AutomaticNoteAuthorTests(unittest.TestCase):
         worker.assert_called_once_with(target=dialog._add_note, args=(None, text), daemon=True)
         with patch.object(notes_gui, 'add_ticket_comment_for_user', return_value=51) as save:
             dialog._add_note(None, text)
-        save.assert_called_once_with(7, 7, text, technician_id=None)
+        save.assert_called_once_with(7, 7, text, technician_id=None, session_technician_id=12)
 
     def test_note_worker_and_handler_do_not_execute_after_logout(self):
         dialog = technician_note_dialog()

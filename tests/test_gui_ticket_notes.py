@@ -61,6 +61,7 @@ def dialog_without_widgets(deletion=False):
     dialog.parent = dialog.owner.window
     dialog.window = MagicMock()
     dialog.ticket_id = 7
+    dialog._ticket = dialog.owner._ticket
     dialog.summary = MagicMock()
     dialog.feedback = MagicMock()
     dialog.save_button = MagicMock()
@@ -146,7 +147,8 @@ class MainNotesTests(unittest.TestCase):
         viewer.tree.selection.return_value = ('7',)
         with patch.object(gui, 'UpdateTicketDialog') as update, patch.object(gui, 'TicketHistoryWindow') as history:
             viewer.open_update_ticket()
-            update.assert_called_once_with(viewer.root, 7, viewer._request_refresh)
+            update.assert_called_once_with(viewer.root, 7, viewer._request_refresh,
+                                           permissions=viewer.permissions, user=viewer.user)
             viewer._update_dialog.is_open = False
             viewer.open_ticket_history()
             history.assert_called_once_with(viewer.root, 7)
@@ -403,7 +405,7 @@ class AddNoteTests(unittest.TestCase):
         dialog = dialog_without_widgets()
         with patch.object(notes_gui, 'add_ticket_comment_for_user', return_value=90) as add:
             dialog._add_note(12, 'Checked cable.')
-        add.assert_called_once_with(7, 7, 'Checked cable.', technician_id=12)
+        add.assert_called_once_with(7, 7, 'Checked cable.', technician_id=12, session_technician_id=None)
         self.assertEqual(dialog._results.get_nowait(), (90, None))
         self.assertEqual(dialog.window.mock_calls, [])
         self.assertEqual(dialog.text.mock_calls, [])

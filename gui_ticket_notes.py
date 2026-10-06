@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from input_validation import validate_comment_text
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import TechnicianReadError, get_active_technicians
+from ticket_access import TicketAccessError, check_session_ticket_access
 from ticket_comment_repository import (
     TicketCommentCreateError, TicketCommentDeleteError, TicketCommentReadError,
     add_ticket_comment_for_user, delete_ticket_comment, get_ticket_comments, validate_comment_id,
@@ -271,6 +272,11 @@ class TicketNotesWindow:
         if self._closed or not require_permission(self.permissions, 'add_note', self.window):
             return
         if self._can_open_dialog():
+            try:
+                check_session_ticket_access(self._ticket, self.user, 'note')
+            except TicketAccessError as error:
+                messagebox.showinfo('Unable to Add Note', str(error), parent=self.window)
+                return
             self._child_dialog = AddNoteDialog(self)
 
     def open_delete(self):
@@ -460,6 +466,7 @@ class AddNoteDialog(_NoteDialog):
     def __init__(self, owner):
         super().__init__(owner, f'Add Note — Ticket #{owner.ticket_id}', 'Save Note')
         self._technicians = []
+        self._ticket = None
         ttk.Label(self.form, text='Technician', style='Helpdesk.Status.TLabel').grid(
             row=0, column=0, sticky='w', pady=(0, 6),
         )
@@ -488,14 +495,15 @@ class AddNoteDialog(_NoteDialog):
             if ticket is not None:
                 if self.owner.user is None:
                     raise ValueError('Please log in again before adding a note.')
+                check_session_ticket_access(ticket, self.owner.user, 'note')
                 if self.owner.user['role'] == 'Technician':
                     linked = get_linked_active_technician(self.owner.user['user_id'])
-                    if linked is None:
+                    if linked is None or linked['technician_id'] != self.owner.user.get('technician_id'):
                         raise ValueError(INVALID_TECHNICIAN_LINK)
                     technicians = [linked]
                 else:
                     technicians = get_active_technicians()
-        except (TicketReadError, TechnicianReadError, UserReadError, ValueError) as error:
+        except (TicketReadError, TechnicianReadError, UserReadError, TicketAccessError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:
             self._results.put((None, 'Unable to load note author choices. Cancel and try again.'))
@@ -509,6 +517,7 @@ class AddNoteDialog(_NoteDialog):
             self.owner._request_refresh()
             messagebox.showinfo('Ticket Not Found', 'No ticket found with that ID. No note was saved.', parent=self.parent)
             return False
+        self._ticket = ticket
         self.summary.set(_ticket_summary(self.ticket_id, ticket))
         if self.owner.user is not None and self.owner.user['role'] == 'Technician':
             if len(self._technicians) != 1:
@@ -530,6 +539,11 @@ class AddNoteDialog(_NoteDialog):
         if self._closed or self._loading or self._saving or not self._ready:
             return
         if not require_permission(self.owner.permissions, 'add_note', self.window):
+            return
+        try:
+            check_session_ticket_access(self._ticket or self.owner._ticket, self.owner.user, 'note')
+        except TicketAccessError as error:
+            self.feedback.set(str(error))
             return
         technician_id = None
         if self.owner.user is None:
@@ -560,7 +574,8 @@ class AddNoteDialog(_NoteDialog):
             if self.owner.user is None:
                 raise ValueError('Please log in again before adding a note.')
             comment_id = add_ticket_comment_for_user(self.ticket_id, self.owner.user['user_id'], note,
-                                                    technician_id=technician_id)
+                                                    technician_id=technician_id,
+                                                    session_technician_id=self.owner.user.get('technician_id'))
         except (TicketCommentCreateError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:

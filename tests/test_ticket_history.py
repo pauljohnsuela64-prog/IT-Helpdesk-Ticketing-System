@@ -16,7 +16,8 @@ import ticket_repository as tickets
 def ticket(status='Assigned', assigned_to='Mark Santos'):
     return dict(ticket_id=7, employee_name='Alice', department='IT', category='Hardware',
                 subject='Printer issue', description='Paper jam', priority='Medium',
-                status=status, assigned_to=assigned_to, resolved_at=None)
+                status=status, assigned_to=assigned_to, resolved_at=None,
+                assigned_technician_id=12 if assigned_to == 'Mark Santos' else None)
 
 
 class HistoryRepositoryTests(unittest.TestCase):

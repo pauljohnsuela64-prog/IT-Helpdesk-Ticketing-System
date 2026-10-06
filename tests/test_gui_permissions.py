@@ -106,7 +106,7 @@ class MainWindowPermissionTests(unittest.TestCase):
                 getattr(viewer, handler)()
             self.assertIs(dialog.call_args.kwargs['permissions'], viewer.permissions)
 
-    def test_technician_can_create_update_history_and_notes_for_any_ticket(self):
+    def test_ticket_dialogs_receive_session_and_history_notes_stay_viewable(self):
         for handler, factory in (('open_create_ticket', 'CreateTicketDialog'),
                                  ('open_update_ticket', 'UpdateTicketDialog'),
                                  ('open_ticket_history', 'TicketHistoryWindow'),
@@ -168,8 +168,10 @@ class NotesPermissionTests(unittest.TestCase):
         read.assert_called_once_with(7)
         self.assertIn('Inactive Author', window.tree.insert.call_args_list[1].kwargs['values'])
 
-    def test_technician_can_open_add_note(self):
+    def test_technician_can_open_add_note_for_own_ticket(self):
         window = window_without_widgets()
+        window.user = {**account('Technician'), 'technician_id': 12}
+        window._ticket['assigned_technician_id'] = 12
         window.permissions = policy('Technician')
         with patch.object(notes_gui, 'AddNoteDialog') as dialog:
             window.open_add()
@@ -179,13 +181,15 @@ class NotesPermissionTests(unittest.TestCase):
         dialog = note_dialog()
         dialog.owner.permissions = policy('Technician')
         dialog.owner.user = {**account('Technician'), 'technician_id': 12}
+        dialog._ticket['assigned_technician_id'] = 12
+        dialog._technicians = [{'technician_id': 12, 'full_name': 'Test Technician'}]
         with patch.object(notes_gui, 'Thread') as worker:
             dialog.save()
         text = 'Checked network cable.\nConnection is stable now.'
         worker.assert_called_once_with(target=dialog._add_note, args=(None, text), daemon=True)
         with patch.object(notes_gui, 'add_ticket_comment_for_user', return_value=90) as add:
             dialog._add_note(None, text)
-        add.assert_called_once_with(7, 7, text, technician_id=None)
+        add.assert_called_once_with(7, 7, text, technician_id=None, session_technician_id=12)
         self.assertEqual(dialog._results.get_nowait(), (90, None))
 
     def test_direct_delete_note_handler_is_blocked_even_with_selected_note(self):

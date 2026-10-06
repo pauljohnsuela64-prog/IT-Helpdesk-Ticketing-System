@@ -3,6 +3,7 @@ from queue import Queue
 import secrets
 from threading import Barrier, Lock, Thread
 import unittest
+import ticket_access
 from unittest.mock import MagicMock, patch
 
 import mysql.connector
@@ -230,7 +231,8 @@ class LinkedNoteRepositoryTests(unittest.TestCase):
         self.addCleanup(self.connect.stop)
 
     def prepare(self, user):
-        self.cursor.fetchone.side_effect = [{'ticket_id': 7}, user]
+        self.cursor.fetchone.side_effect = [{'ticket_id': 7, 'assigned_technician_id': 12}, user,
+                                           {'technician_id': 12, 'full_name': 'Test Technician'}]
 
     def assert_no_insert(self):
         self.assertFalse(any(call.args[0].startswith('INSERT') for call in self.cursor.execute.call_args_list))
@@ -238,7 +240,7 @@ class LinkedNoteRepositoryTests(unittest.TestCase):
 
     def test_technician_author_is_derived_from_locked_account_not_user_supplied_name(self):
         self.prepare({**account('Technician'), 'technician_id': 12})
-        with patch.object(comments, 'get_active_technician', return_value={'technician_id': 12}) as active:
+        with patch.object(ticket_access, 'get_active_technician', return_value={'technician_id': 12}) as active:
             self.assertEqual(comments.add_ticket_comment_for_user(7, 20, '  Checked cable.  '), 51)
         active.assert_called_once_with(12, self.cursor)
         self.assertEqual(self.cursor.execute.call_args_list[1].args[1], (20,))
@@ -257,7 +259,7 @@ class LinkedNoteRepositoryTests(unittest.TestCase):
     def test_missing_link_or_inactive_technician_blocks_saving(self):
         for linked in (None, 12):
             self.prepare({**account('Technician'), 'technician_id': linked})
-            with patch.object(comments, 'get_active_technician', return_value=None), \
+            with patch.object(ticket_access, 'get_active_technician', return_value=None), \
                  self.assertRaises(comments.TicketCommentCreateError) as caught:
                 comments.add_ticket_comment_for_user(7, 20, 'Checked cable.')
             self.assertEqual(str(caught.exception), users.INVALID_TECHNICIAN_LINK)
@@ -301,7 +303,7 @@ class LinkedNoteRepositoryTests(unittest.TestCase):
         self.cursor.execute.side_effect = None
         self.prepare({**account('Technician'), 'technician_id': 12})
         self.connection.commit.side_effect = mysql.connector.Error(errno=2013)
-        with patch.object(comments, 'get_active_technician', return_value={'technician_id': 12}), \
+        with patch.object(ticket_access, 'get_active_technician', return_value={'technician_id': 12}), \
              self.assertRaises(comments.TicketCommentCreateError):
             comments.add_ticket_comment_for_user(7, 20, 'Checked cable.')
         self.assertEqual(self.connection.rollback.call_count, 2)

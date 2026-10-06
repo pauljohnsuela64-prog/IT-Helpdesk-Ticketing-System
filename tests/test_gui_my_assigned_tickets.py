@@ -83,12 +83,13 @@ class AssignedViewControlsTests(unittest.TestCase):
             viewer.show_all_tickets()
         worker.assert_called_once_with(target=viewer._load_tickets, args=('',), daemon=True)
 
-    def test_technician_can_still_update_any_selected_ticket_in_all_view(self):
+    def test_update_handler_passes_session_to_dialog_for_ownership_checks_in_all_view(self):
         viewer = technician_viewer()
         viewer.tree.selection.return_value = ('987',)
         with patch.object(gui, 'UpdateTicketDialog') as form:
             viewer.open_update_ticket()
-        form.assert_called_once_with(viewer.root, 987, viewer._request_refresh)
+        form.assert_called_once_with(viewer.root, 987, viewer._request_refresh,
+                                    permissions=viewer.permissions, user=viewer.user)
 
 
 class AssignedSearchRefreshTests(unittest.TestCase):

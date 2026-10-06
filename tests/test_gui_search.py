@@ -241,7 +241,7 @@ class SearchRepositoryTests(unittest.TestCase):
         self.assertEqual(repository.search_tickets('  Hardware  '), [ticket()])
         query, parameters = self.cursor.execute.call_args.args
         self.assertTrue(query.startswith('SELECT '))
-        self.assertIn('assigned_to, created_at FROM helpdesk.tickets', query)
+        self.assertIn('assigned_to, created_at, assigned_technician_id FROM helpdesk.tickets', query)
         self.assertEqual(parameters, ('%Hardware%',) * 8)
         self.assertEqual(query.count('LIKE LOWER(%s)'), 8)
         for expression in ('CAST(ticket_id AS CHAR)', 'employee_name', 'department', 'category',

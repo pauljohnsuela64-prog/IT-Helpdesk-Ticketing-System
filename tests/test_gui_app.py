@@ -251,7 +251,7 @@ class TicketListRepositoryTests(unittest.TestCase):
         cursor.execute.assert_called_once()
         query, parameters = cursor.execute.call_args.args
         self.assertTrue(query.startswith('SELECT '))
-        self.assertIn('assigned_to, created_at FROM helpdesk.tickets ORDER BY ticket_id', query)
+        self.assertIn('assigned_to, created_at, assigned_technician_id FROM helpdesk.tickets ORDER BY ticket_id', query)
         self.assertIsNone(parameters)
         connection.commit.assert_not_called()
 

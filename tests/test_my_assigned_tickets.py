@@ -24,23 +24,23 @@ class AssignedTicketRepositoryTests(unittest.TestCase):
         self.lookup_mock = self.lookup.start()
         self.addCleanup(self.lookup.stop)
 
-    def test_resolves_record_by_id_then_binds_full_assignment_name(self):
+    def test_resolves_record_by_id_then_binds_assignment_id(self):
         self.assertEqual(repository.get_assigned_tickets(12), [ticket()])
         self.lookup_mock.assert_called_once_with(12)
         query, params = self.cursor.execute.call_args.args
-        self.assertIn('FROM helpdesk.tickets WHERE assigned_to = %s ORDER BY ticket_id', query)
+        self.assertIn('FROM helpdesk.tickets WHERE assigned_technician_id = %s ORDER BY ticket_id', query)
         self.assertNotIn('LIKE', query)
         self.assertNotIn("Mark O'Santos", query)
-        self.assertEqual(params, ("Mark O'Santos",))
+        self.assertEqual(params, (12,))
         self.connection.commit.assert_not_called()
 
     def test_search_is_parameterized_case_insensitive_and_parenthesized_inside_scope(self):
         repository.get_assigned_tickets(12, ' 3 ')
         query, params = self.cursor.execute.call_args.args
-        self.assertIn('WHERE assigned_to = %s AND (', query)
+        self.assertIn('WHERE assigned_technician_id = %s AND (', query)
         self.assertTrue(query.endswith(") ORDER BY ticket_id"))
         self.assertEqual(query.count('LIKE LOWER(%s)'), 8)
-        self.assertEqual(params, ("Mark O'Santos",) + ('%3%',) * 8)
+        self.assertEqual(params, (12,) + ('%3%',) * 8)
         self.assertTrue(query.startswith('SELECT '))
         self.connection.commit.assert_not_called()
 
@@ -48,7 +48,7 @@ class AssignedTicketRepositoryTests(unittest.TestCase):
         for term, pattern in (('  50%_!  ', '%50!%!_!!%'), ("' OR 1=1 --", "%' OR 1=1 --%")):
             repository.get_assigned_tickets(12, term)
             query, params = self.cursor.execute.call_args.args
-            self.assertEqual(params, ("Mark O'Santos",) + (pattern,) * 8)
+            self.assertEqual(params, (12,) + (pattern,) * 8)
             self.assertNotIn(term.strip(), query)
             self.assertEqual(query.count("ESCAPE '!'"), 8)
 
@@ -56,7 +56,7 @@ class AssignedTicketRepositoryTests(unittest.TestCase):
         for term in ('', ' \t '):
             repository.get_assigned_tickets(12, term)
             self.assertNotIn('AND (', self.cursor.execute.call_args.args[0])
-            self.assertEqual(self.cursor.execute.call_args.args[1], ("Mark O'Santos",))
+            self.assertEqual(self.cursor.execute.call_args.args[1], (12,))
 
     def test_missing_or_malformed_session_link_has_friendly_feedback_without_querying(self):
         for ident in (None, True, '12', 0, -1, 2147483648, '12 OR 1=1'):
@@ -101,13 +101,13 @@ class AssignmentSearchSqlTests(unittest.TestCase):
         self.db.execute("ATTACH DATABASE ':memory:' AS helpdesk")
         self.db.execute('CREATE TABLE helpdesk.tickets ('
                         'ticket_id INTEGER, employee_name TEXT, department TEXT, category TEXT, '
-                        'subject TEXT, priority TEXT, status TEXT, assigned_to TEXT, created_at TEXT)')
-        self.db.executemany('INSERT INTO helpdesk.tickets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-            (3, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'In Progress', 'Mark Santos', None),
-            (8, 'Bob Reyes', 'IT', 'Printer', 'Printer 50%_!', 'Medium', 'Resolved', 'Mark Santos', None),
-            (33, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'In Progress', 'Anna Reyes', None),
-            (34, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'Open', None, None),
-            (35, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'Assigned', 'Mark Santos Jr', None),
+                        'subject TEXT, priority TEXT, status TEXT, assigned_to TEXT, created_at TEXT, assigned_technician_id INTEGER)')
+        self.db.executemany('INSERT INTO helpdesk.tickets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            (3, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'In Progress', 'Mark Santos', None, 12),
+            (8, 'Bob Reyes', 'IT', 'Printer', 'Printer 50%_!', 'Medium', 'Resolved', 'Mark Santos', None, 12),
+            (33, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'In Progress', 'Anna Reyes', None, 35),
+            (34, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'Open', None, None, None),
+            (35, 'Alice Reyes', 'Finance', 'Hardware', 'PC 3', 'High', 'Assigned', 'Mark Santos Jr', None, 36),
         ])
 
         def read(query, params):
@@ -144,14 +144,15 @@ class AssignmentSearchSqlTests(unittest.TestCase):
         self.assertEqual(self.ids(' \t '), [3, 8])
 
     def test_refresh_reflects_reassignment_and_unassignment(self):
-        self.db.execute('UPDATE helpdesk.tickets SET assigned_to = ? WHERE ticket_id = ?', ('Anna Reyes', 3))
+        self.db.execute('UPDATE helpdesk.tickets SET assigned_to = ?, assigned_technician_id = ? WHERE ticket_id = ?', ('Anna Reyes', 35, 3))
         self.assertEqual(self.ids(), [8])
-        self.db.execute('UPDATE helpdesk.tickets SET assigned_to = NULL WHERE ticket_id = 8')
+        self.db.execute('UPDATE helpdesk.tickets SET assigned_to = NULL, assigned_technician_id = NULL WHERE ticket_id = 8')
         self.assertEqual(self.ids(), [])
 
-    def test_same_name_record_has_same_list_under_existing_name_storage(self):
+    def test_ids_distinguish_records_even_with_the_same_name(self):
+        self.db.execute('UPDATE helpdesk.tickets SET assigned_to = ? WHERE ticket_id = ?', ('Mark Santos', 33))
         self.technician['technician_id'] = 35
-        self.assertEqual([row['ticket_id'] for row in repository.get_assigned_tickets(35)], [3, 8])
+        self.assertEqual([row['ticket_id'] for row in repository.get_assigned_tickets(35)], [33])
 
 
 if __name__ == '__main__':

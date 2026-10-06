@@ -5,6 +5,10 @@ from database import get_connection
 from input_validation import validate_text
 from technician_repository import TechnicianReadError, get_active_technician, get_technician, validate_technician_id
 from ticket_history_repository import SETUP_MESSAGE, record_ticket_created, record_ticket_updated
+from ticket_access import (
+    ADMIN_ASSIGNMENT_ONLY, ASSIGNMENT_SETUP_MESSAGE, TicketAccessError, authorize_ticket_write,
+)
+from user_repository import validate_user_id
 
 
 class TicketReadError(Exception):
@@ -20,7 +24,7 @@ class AssignedTicketsLinkError(TicketReadError):
 
 _TICKET_LIST_SQL = (
     'SELECT ticket_id, employee_name, department, category, '
-    'subject, priority, status, assigned_to, created_at FROM helpdesk.tickets '
+    'subject, priority, status, assigned_to, created_at, assigned_technician_id FROM helpdesk.tickets '
 )
 _SEARCH_CLAUSE = (
     "LOWER(CAST(ticket_id AS CHAR)) LIKE LOWER(%s) ESCAPE '!' "
@@ -61,11 +65,7 @@ def search_tickets(search_term):
 
 
 def get_assigned_tickets(technician_id, search_term=''):
-    """Read the linked record's name assignments, optionally within a search.
-
-    Existing ticket assignments store names, so equal technician names share
-    the same list. Inactive records retain their assignments and may be viewed.
-    """
+    """Read assignments by linked ID, including inactive records, within a search."""
     try:
         validate_technician_id(technician_id)
     except ValueError:
@@ -79,10 +79,10 @@ def get_assigned_tickets(technician_id, search_term=''):
     pattern = _search_pattern(search_term)
     # Parentheses keep every search field inside the exact assignment scope.
     return _read_tickets(
-        _TICKET_LIST_SQL + 'WHERE assigned_to = %s '
+        _TICKET_LIST_SQL + 'WHERE assigned_technician_id = %s '
         + ('AND (' + _SEARCH_CLAUSE + ') ' if pattern is not None else '')
         + 'ORDER BY ticket_id',
-        (technician['full_name'],) + ((pattern,) * 8 if pattern is not None else ()),
+        (technician_id,) + ((pattern,) * 8 if pattern is not None else ()),
     )
 
 
@@ -99,6 +99,8 @@ def _read_tickets(query, parameters=None):
             'all required connection settings must be supplied.'
         ) from None
     except mysql.connector.Error as error:
+        if error.errno == 1054:
+            raise TicketReadError(ASSIGNMENT_SETUP_MESSAGE) from None
         raise TicketReadError(
             f'Unable to retrieve tickets (MySQL error code: {error.errno}). '
             'Check that MySQL is running and your connection settings are correct.'
@@ -129,7 +131,7 @@ def get_ticket(ticket_id):
     tickets = _read_tickets(
         'SELECT ticket_id, employee_name, department, category, subject, '
         'description, priority, status, assigned_to, created_at, updated_at, '
-        'resolved_at FROM helpdesk.tickets WHERE ticket_id = %s',
+        'resolved_at, assigned_technician_id FROM helpdesk.tickets WHERE ticket_id = %s',
         (ticket_id,),
     )
     return tickets[0] if tickets else None
@@ -183,7 +185,14 @@ def delete_ticket(ticket_id):
         ) from None
 
 
-def update_ticket(ticket_id, changes, *, technician_id=None):
+def update_ticket_for_user(ticket_id, user_id, changes, *, session_technician_id=None, technician_id=None):
+    """Authenticated GUI updates always recheck current ownership in the transaction."""
+    validate_user_id(user_id)
+    return update_ticket(ticket_id, changes, technician_id=technician_id,
+                         user_id=user_id, session_technician_id=session_technician_id)
+
+
+def update_ticket(ticket_id, changes, *, technician_id=None, user_id=None, session_technician_id=None):
     """Validate editable fields and atomically update an existing ticket.
 
     Return False for an unchanged ticket. Resolution time is preserved while
@@ -192,6 +201,8 @@ def update_ticket(ticket_id, changes, *, technician_id=None):
     Selecting a technician changes Open to Assigned unless another status is chosen.
     """
     validate_ticket_id(ticket_id)
+    if user_id is not None:
+        validate_user_id(user_id)
     if technician_id is not None:
         validate_technician_id(technician_id)
         if 'assigned_to' in changes:
@@ -220,12 +231,17 @@ def update_ticket(ticket_id, changes, *, technician_id=None):
                     # Recheck existence and lock the row for consistent status transitions.
                     cursor.execute(
                         'SELECT employee_name, department, category, subject, description, '
-                        'priority, status, assigned_to, resolved_at FROM helpdesk.tickets '
+                        'priority, status, assigned_to, resolved_at, assigned_technician_id FROM helpdesk.tickets '
                         'WHERE ticket_id = %s FOR UPDATE', (ticket_id,),
                     )
                     current = cursor.fetchone()
                     if current is None:
                         raise TicketUpdateError('No ticket found with that ID.')
+                    if user_id is not None:
+                        actor = authorize_ticket_write(cursor, current, user_id, 'update', session_technician_id)
+                        if actor['role'] == 'Technician' and (technician_id is not None or 'assigned_to' in changes):
+                            raise TicketAccessError(ADMIN_ASSIGNMENT_ONLY)
+                    assigned_id = current.get('assigned_technician_id')
                     if technician_id is not None:
                         technician = get_active_technician(technician_id, cursor)
                         if technician is None:
@@ -234,38 +250,47 @@ def update_ticket(ticket_id, changes, *, technician_id=None):
                                 'Choose an active technician and try again.'
                             )
                         validated['assigned_to'] = technician['full_name']
+                        assigned_id = technician_id
                         if current['status'] == 'Open' and validated.get('status', 'Open') == 'Open':
                             validated['status'] = 'Assigned'
-                    if all(current[field] == value for field, value in validated.items()):
+                    elif 'assigned_to' in validated:
+                        assigned_id = None
+                    if (all(current[field] == value for field, value in validated.items())
+                            and assigned_id == current.get('assigned_technician_id')):
                         connection.rollback()
                         return False
                     values = {**current, **validated}
+                    values['assigned_technician_id'] = assigned_id
                     entering_resolved = values['status'] == 'Resolved' and current['status'] != 'Resolved'
                     resolved_at = current['resolved_at'] if values['status'] == 'Resolved' else None
                     cursor.execute(
                         'UPDATE helpdesk.tickets SET employee_name = %s, department = %s, '
                         'category = %s, subject = %s, description = %s, priority = %s, '
-                        'status = %s, assigned_to = %s, '
+                        'status = %s, assigned_to = %s, assigned_technician_id = %s, '
                         'resolved_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE %s END '
                         'WHERE ticket_id = %s',
                         tuple(values[field] for field in EDITABLE_FIELDS)
-                        + (entering_resolved, resolved_at, ticket_id),
+                        + (assigned_id, entering_resolved, resolved_at, ticket_id),
                     )
                     record_ticket_updated(cursor, ticket_id, current, values)
                 connection.commit()
                 return True
-            except (mysql.connector.Error, TicketUpdateError):
+            except (mysql.connector.Error, TicketUpdateError, TicketAccessError):
                 try:
                     connection.rollback()
                 except mysql.connector.Error:
                     pass
                 raise
+    except TicketAccessError as error:
+        raise TicketUpdateError(str(error)) from None
     except ValueError:
         raise TicketUpdateError(
             'Check your environment settings. DB_NAME must be helpdesk and '
             'all required connection settings must be supplied.'
         ) from None
     except mysql.connector.Error as error:
+        if error.errno == 1054:
+            raise TicketUpdateError(ASSIGNMENT_SETUP_MESSAGE) from None
         raise TicketUpdateError(
             f'Ticket update could not be confirmed (MySQL error code: {error.errno}). '
             'Check your connection and use View Tickets before retrying. '

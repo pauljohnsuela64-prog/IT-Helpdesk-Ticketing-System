@@ -5,16 +5,21 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from input_validation import validate_text
+from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import TechnicianReadError, get_active_technicians
+from ticket_access import ADMIN_ASSIGNMENT_ONLY, TicketAccessError, check_session_ticket_access
 from ticket_repository import (
     CATEGORIES, PRIORITIES, STATUSES, TicketReadError, TicketUpdateError,
-    get_ticket, update_ticket,
+    get_ticket, update_ticket_for_user,
 )
+from user_repository import INVALID_TECHNICIAN_LINK, UserReadError, get_linked_active_technician, public_user
 
 
 class UpdateTicketDialog:
-    def __init__(self, parent, ticket_id, on_updated):
+    def __init__(self, parent, ticket_id, on_updated, permissions=None, user=None):
         self.parent = parent
+        self.user = public_user(user) if user is not None else None
+        self.permissions = permissions if permissions is not None else SessionPermissions(self.user)
         self.ticket_id = ticket_id
         self.on_updated = on_updated
         self._results = Queue()
@@ -79,13 +84,23 @@ class UpdateTicketDialog:
 
     def _load_ticket(self):
         """Read fresh details in the worker; never read Treeview or Tk variables."""
+        if not self.permissions.allows('update_ticket'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             ticket = get_ticket(self.ticket_id)
             if ticket is None:
                 self._results.put((None, 'No ticket found with that ID. Close this dialog and refresh tickets.'))
                 return
-            technicians = get_active_technicians()
-        except (TicketReadError, TechnicianReadError, ValueError) as error:
+            check_session_ticket_access(ticket, self.user, 'update')
+            if self.user['role'] == 'Technician':
+                linked = get_linked_active_technician(self.user['user_id'])
+                if linked is None or linked['technician_id'] != self.user.get('technician_id'):
+                    raise TicketAccessError(INVALID_TECHNICIAN_LINK)
+                technicians = []
+            else:
+                technicians = get_active_technicians()
+        except (TicketReadError, TechnicianReadError, UserReadError, TicketAccessError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:
             self._results.put((None, 'Unable to load ticket details. Close this dialog and try again.'))
@@ -112,7 +127,9 @@ class UpdateTicketDialog:
             f'Created: {self._ticket["created_at"]}    Updated: {self._ticket["updated_at"]}\n'
             f'Resolved: {self._ticket["resolved_at"] or "Not resolved"}'
         )
-        self.feedback.set('Choose an active technician, keep the current assignment, or unassign.'
+        self.feedback.set('Only Admin users can change technician assignments.'
+                          if self.user['role'] == 'Technician' else
+                          'Choose an active technician, keep the current assignment, or unassign.'
                           if self._technicians else
                           'No active technicians are available. You can keep the current assignment or unassign.')
         self.save_button.state(['!disabled'])
@@ -142,7 +159,11 @@ class UpdateTicketDialog:
                 self._widgets.append((self.description, 'normal'))
                 continue
             self.fields[field] = tk.StringVar(master=self.window, value=self._ticket[field] or '')
-            if field == 'assigned_to':
+            if field == 'assigned_to' and self.user['role'] == 'Technician':
+                widget = ttk.Entry(self.form, textvariable=self.fields[field], state='readonly', font=('Segoe UI', 10))
+                self.assignee = widget
+                normal_state = 'readonly'
+            elif field == 'assigned_to':
                 current = self._ticket[field] or 'Unassigned'
                 names = (f'Keep current: {current}', 'Unassign technician') + tuple(
                     f'{technician["full_name"]} (ID: {technician["technician_id"]})'
@@ -178,6 +199,10 @@ class UpdateTicketDialog:
                 raise ValueError(f'Choose one of the listed {field} options.')
             values[field] = value
         changes = {field: value for field, value in values.items() if value != self._ticket[field]}
+        if self.user['role'] == 'Technician':
+            if self.fields['assigned_to'].get() != (self._ticket['assigned_to'] or ''):
+                raise TicketAccessError(ADMIN_ASSIGNMENT_ONLY)
+            return changes, None
         selection = self.assignee.current()
         if not 0 <= selection < len(self._technicians) + 2:
             raise ValueError('Choose a listed technician, keep current, or unassign.')
@@ -208,9 +233,12 @@ class UpdateTicketDialog:
     def save(self):
         if self._closed or self._loading or self._saving or self._ticket is None:
             return
+        if not require_permission(self.permissions, 'update_ticket', self.window):
+            return
         try:
+            check_session_ticket_access(self._ticket, self.user, 'update')
             changes, technician_id = self._validated_changes()
-        except ValueError as error:
+        except (ValueError, TicketAccessError) as error:
             self.feedback.set(str(error))
             return
         if not changes and technician_id is None:
@@ -227,8 +255,14 @@ class UpdateTicketDialog:
 
     def _save_ticket(self, changes, technician_id):
         """Reuse the transaction that checks technicians and logs ticket history."""
+        if not self.permissions.allows('update_ticket'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
-            saved = update_ticket(self.ticket_id, changes, technician_id=technician_id)
+            if self.user is None:
+                raise ValueError('Please log in again before updating a ticket.')
+            saved = update_ticket_for_user(self.ticket_id, self.user['user_id'], changes,
+                                          session_technician_id=self.user.get('technician_id'), technician_id=technician_id)
         except (TicketUpdateError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:

@@ -98,7 +98,8 @@ class MainHistoryTests(unittest.TestCase):
         viewer.tree.selection.return_value = ('7',)
         with patch.object(gui, 'UpdateTicketDialog') as update:
             viewer.open_update_ticket()
-        update.assert_called_once_with(viewer.root, 7, viewer._request_refresh)
+        update.assert_called_once_with(viewer.root, 7, viewer._request_refresh,
+                                       permissions=viewer.permissions, user=viewer.user)
         self.assertEqual(viewer._active_search, 'Hardware')
         viewer._history_window.close.assert_not_called()
 

@@ -144,7 +144,7 @@ class TicketRepositoryTests(unittest.TestCase):
         self.assertEqual(self.saved_values()[0]['status'], 'Assigned')
 
     def test_reselect_unchanged_assignment_and_status_is_no_op(self):
-        self.select_for_save(ticket('Assigned', 'Anna Reyes'))
+        self.select_for_save({**ticket('Assigned', 'Anna Reyes'), 'assigned_technician_id': 35})
         self.assertFalse(tickets.update_ticket(7, {}, technician_id=35))
         self.assertEqual(self.cursor.execute.call_count, 2)
         self.connection.commit.assert_not_called()

@@ -576,6 +576,8 @@ class RepositoryIntegrationTests(unittest.TestCase):
                 self.assertEqual(change._results.get_nowait(), (True, None))
                 self.assertEqual(repository.get_technicians(), [technician(new_status)])
                 update = update_gui.UpdateTicketDialog.__new__(update_gui.UpdateTicketDialog)
+                update.user = {'role': 'Admin', 'status': 'Active'}
+                update.permissions = SessionPermissions(update.user)
                 update.ticket_id = 7
                 update._results = Queue()
                 update._load_ticket()

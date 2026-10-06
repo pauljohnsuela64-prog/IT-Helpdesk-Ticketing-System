@@ -74,7 +74,7 @@ class NoteRepositoryTests(unittest.TestCase):
         self.assertEqual(comments.add_ticket_comment(7, 12, note), 51)
         calls = self.cursor.execute.call_args_list
         self.assertEqual(calls[0].args, (
-            'SELECT ticket_id FROM helpdesk.tickets WHERE ticket_id = %s FOR UPDATE', (7,),
+            'SELECT ticket_id, assigned_technician_id FROM helpdesk.tickets WHERE ticket_id = %s FOR UPDATE', (7,),
         ))
         self.assertEqual(calls[1].args, (
             'SELECT technician_id, full_name FROM helpdesk.technicians '

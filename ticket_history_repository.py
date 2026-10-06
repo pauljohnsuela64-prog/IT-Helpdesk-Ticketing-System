@@ -91,13 +91,17 @@ def record_ticket_updated(cursor, ticket_id, before, after):
     """Record only changed fields, using the existing ticket update transaction."""
     old_technician = before['assigned_to'] or None
     new_technician = after['assigned_to'] or None
-    if old_technician != new_technician:
+    id_changed = before.get('assigned_technician_id') != after.get('assigned_technician_id')
+    if old_technician != new_technician or id_changed:
         if new_technician is None:
             action, details = 'Technician Unassigned', old_technician
         elif old_technician is None:
             action, details = 'Technician Assigned', new_technician
         else:
             action, details = 'Technician Reassigned', f'{old_technician} -> {new_technician}'
+            if old_technician == new_technician:
+                details = (f'{old_technician} (ID: {before.get("assigned_technician_id") or "unknown"}) -> '
+                           f'{new_technician} (ID: {after.get("assigned_technician_id")})')
         _record_activity(cursor, ticket_id, action, details)
     for field, action in (('status', 'Status Changed'), ('priority', 'Priority Changed')):
         if before[field] != after[field]:

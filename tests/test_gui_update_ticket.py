@@ -7,6 +7,8 @@ import gui_app as gui
 import gui_update_ticket as update_gui
 import ticket_repository as repository
 from test_gui_app import viewer_without_window
+from test_gui_authentication import account
+from gui_permissions import SessionPermissions
 
 
 TECHNICIANS = [
@@ -25,6 +27,8 @@ def ticket(status='Open', assigned_to=None):
 def dialog_without_window(current=None):
     dialog = update_gui.UpdateTicketDialog.__new__(update_gui.UpdateTicketDialog)
     dialog.parent = MagicMock()
+    dialog.user = account()
+    dialog.permissions = SessionPermissions(dialog.user)
     dialog.window = MagicMock()
     dialog.form = MagicMock()
     dialog.ticket_id = 7
@@ -32,9 +36,9 @@ def dialog_without_window(current=None):
     dialog._ticket = ticket() if current is None else current
     dialog._technicians = TECHNICIANS
     dialog.fields = {}
-    for field in ('employee_name', 'department', 'category', 'subject', 'priority', 'status'):
+    for field in ('employee_name', 'department', 'category', 'subject', 'priority', 'status', 'assigned_to'):
         variable = MagicMock()
-        variable.get.return_value = dialog._ticket[field]
+        variable.get.return_value = dialog._ticket[field] or ''
         dialog.fields[field] = variable
     dialog.description = MagicMock()
     dialog.description.get.return_value = dialog._ticket['description']
@@ -70,7 +74,8 @@ class ViewerUpdateTests(unittest.TestCase):
             dialog.return_value.is_open = True
             viewer.open_update_ticket()
             viewer.open_update_ticket()
-        dialog.assert_called_once_with(viewer.root, 7, viewer._request_refresh)
+        dialog.assert_called_once_with(viewer.root, 7, viewer._request_refresh,
+                                       permissions=viewer.permissions, user=viewer.user)
         dialog.return_value.focus.assert_called_once_with()
 
     def test_update_success_keeps_filter_and_queues_refresh_if_loading(self):
@@ -197,7 +202,7 @@ class LoadTests(unittest.TestCase):
              patch.object(update_gui.ttk, 'Label'), patch.object(update_gui.ttk, 'Entry'), \
              patch.object(update_gui.ttk, 'Scrollbar'), patch.object(update_gui.ttk, 'Button'), \
              patch.object(update_gui.ttk, 'Combobox') as combo, patch.object(update_gui, 'Thread') as worker:
-            dialog = update_gui.UpdateTicketDialog(MagicMock(), 7, MagicMock())
+            dialog = update_gui.UpdateTicketDialog(MagicMock(), 7, MagicMock(), user=account())
             worker.assert_called_once_with(target=dialog._load_ticket, daemon=True)
             self.assertTrue(dialog._loading)
             dialog._results.put(((current, duplicates), None))
@@ -314,9 +319,9 @@ class SaveTests(unittest.TestCase):
 
     def test_worker_reuses_repository_without_reading_or_updating_widgets(self):
         dialog = dialog_without_window()
-        with patch.object(update_gui, 'update_ticket', return_value=True) as update:
+        with patch.object(update_gui, 'update_ticket_for_user', return_value=True) as update:
             dialog._save_ticket({'priority': 'High'}, 35)
-        update.assert_called_once_with(7, {'priority': 'High'}, technician_id=35)
+        update.assert_called_once_with(7, 7, {'priority': 'High'}, session_technician_id=None, technician_id=35)
         self.assertEqual(dialog._results.get_nowait(), (True, None))
         self.assertEqual(dialog.window.mock_calls, [])
         self.assertEqual(dialog.assignee.mock_calls, [])
@@ -330,7 +335,7 @@ class SaveTests(unittest.TestCase):
             with self.subTest(error=str(error)):
                 dialog = dialog_without_window()
                 dialog._saving = True
-                with patch.object(update_gui, 'update_ticket', side_effect=error):
+                with patch.object(update_gui, 'update_ticket_for_user', side_effect=error):
                     dialog._save_ticket({'priority': 'High'}, 35)
                 dialog._check_save()
                 self.assertNotIn('private details', dialog.feedback.set.call_args.args[0])
@@ -381,7 +386,7 @@ class RepositoryIntegrationTests(unittest.TestCase):
         connection = MagicMock()
         connection.__enter__.return_value = connection
         cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchone.side_effect = [current, TECHNICIANS[1]]
+        cursor.fetchone.side_effect = [current, account(), TECHNICIANS[1]]
         with patch.object(repository, 'get_connection', return_value=connection):
             dialog._save_ticket(changes, technician_id)
         self.assertEqual(dialog._results.get_nowait(), (True, None))

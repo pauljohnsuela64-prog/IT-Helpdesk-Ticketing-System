@@ -8,6 +8,9 @@ from input_validation import validate_comment_text
 from technician_repository import get_active_technician, validate_technician_id
 from ticket_repository import validate_ticket_id
 from user_repository import INVALID_TECHNICIAN_LINK, validate_user_id
+from ticket_access import (
+    ASSIGNMENT_SETUP_MESSAGE, DATABASE_LINK, TicketAccessError, authorize_ticket_write,
+)
 
 
 CREATE_TICKET_COMMENTS_SQL = (
@@ -85,15 +88,16 @@ def add_ticket_comment(ticket_id, technician_id, comment_text):
     return _save_ticket_comment(ticket_id, technician_id, comment_text)
 
 
-def add_ticket_comment_for_user(ticket_id, user_id, comment_text, technician_id=None):
+def add_ticket_comment_for_user(ticket_id, user_id, comment_text, technician_id=None, *, session_technician_id=DATABASE_LINK):
     """Technicians use their database link; Admins may choose an Active author."""
     validate_user_id(user_id)
     if technician_id is not None:
         validate_technician_id(technician_id)
-    return _save_ticket_comment(ticket_id, technician_id, comment_text, user_id=user_id)
+    return _save_ticket_comment(ticket_id, technician_id, comment_text, user_id=user_id,
+                                session_technician_id=session_technician_id)
 
 
-def _save_ticket_comment(ticket_id, technician_id, comment_text, user_id=None):
+def _save_ticket_comment(ticket_id, technician_id, comment_text, user_id=None, session_technician_id=DATABASE_LINK):
     validate_ticket_id(ticket_id)
     comment_text = validate_comment_text(comment_text)
     try:
@@ -102,26 +106,22 @@ def _save_ticket_comment(ticket_id, technician_id, comment_text, user_id=None):
                 with connection.cursor(dictionary=True) as cursor:
                     # Locks prevent deletion or deactivation between checking and saving.
                     cursor.execute(
-                        'SELECT ticket_id FROM helpdesk.tickets '
+                        'SELECT ticket_id, assigned_technician_id FROM helpdesk.tickets '
                         'WHERE ticket_id = %s FOR UPDATE', (ticket_id,),
                     )
-                    if cursor.fetchone() is None:
+                    ticket = cursor.fetchone()
+                    if ticket is None:
                         raise TicketCommentCreateError('No ticket found with that ID. No note was saved.')
                     if user_id is not None:
-                        cursor.execute('SELECT role, status, technician_id FROM helpdesk.users '
-                                       'WHERE user_id = %s FOR UPDATE', (user_id,))
-                        user = cursor.fetchone()
-                        if user is None or user['status'] != 'Active' or user['role'] not in ('Admin', 'Technician'):
-                            raise TicketCommentCreateError('You do not have permission to perform this action. Please log in again.')
+                        user = authorize_ticket_write(cursor, ticket, user_id, 'note', session_technician_id)
                         if user['role'] == 'Technician':
                             if user['technician_id'] is None or (technician_id is not None and technician_id != user['technician_id']):
                                 raise TicketCommentCreateError(INVALID_TECHNICIAN_LINK)
                             technician_id = user['technician_id']
                         elif technician_id is None:
                             raise TicketCommentCreateError('Please select an Active technician as the note author.')
-                    if get_active_technician(technician_id, cursor) is None:
-                        if user_id is not None and user['role'] == 'Technician':
-                            raise TicketCommentCreateError(INVALID_TECHNICIAN_LINK)
+                    # Technician authorization already locked and validated its author.
+                    if (user_id is None or user['role'] == 'Admin') and get_active_technician(technician_id, cursor) is None:
                         raise TicketCommentCreateError(
                             'The selected technician is no longer available or Active. '
                             'No note was saved. Please select an active technician again.'
@@ -134,17 +134,19 @@ def _save_ticket_comment(ticket_id, technician_id, comment_text, user_id=None):
                     comment_id = cursor.lastrowid
                 connection.commit()
                 return comment_id
-            except (mysql.connector.Error, TicketCommentCreateError):
+            except (mysql.connector.Error, TicketCommentCreateError, TicketAccessError):
                 try:
                     connection.rollback()
                 except mysql.connector.Error:
                     pass
                 raise
+    except TicketAccessError as error:
+        raise TicketCommentCreateError(str(error)) from None
     except ValueError:
         raise TicketCommentCreateError(CONFIGURATION_MESSAGE) from None
     except mysql.connector.Error as error:
-        if user_id is not None and error.errno == 1054:
-            raise TicketCommentCreateError('Run python setup_user_technicians.py to add the technician relationship.') from None
+        if error.errno == 1054:
+            raise TicketCommentCreateError(ASSIGNMENT_SETUP_MESSAGE + ' Also check setup_user_technicians.py.') from None
         if error.errno == 1146:
             raise TicketCommentCreateError(SETUP_MESSAGE) from None
         raise TicketCommentCreateError(

@@ -1310,7 +1310,8 @@ Manual tests:
    and verify the friendly instruction to create/reactivate a technician. Admin
    creation must still work. Create an Active technician through Manage
    Technicians, then reopen Create Account and verify it becomes available.
-5. Login as a linked Technician. Open any ticket → Ticket Notes → Add Note. Verify
+5. Login as a linked Technician. Open a ticket assigned to its linked record →
+   Ticket Notes → Add Note. Verify
    the linked name is displayed, no author chooser appears, and a valid saved note
    uses that technician. Verify blank/short/meaningless notes still fail. Confirm
    ticket status and automatic history did not change just from adding the note.
@@ -1338,11 +1339,11 @@ the existing ticket table, with a label showing the current view. Every login
 starts in All Tickets. Admins keep the existing full ticket interface.
 
 My Assigned Tickets resolves the session's linked `technician_id` to its
-technician record, then loads that record's name assignments using parameterized,
-read-only SQL. The existing `tickets.assigned_to` column stores names, so
-technicians with equal names under the database collation share the same list.
-Distinct technician names are needed to distinguish their assignments with this
-schema. No migration or database setup is required for this feature.
+technician record, then loads assignments by `tickets.assigned_technician_id`
+using parameterized, read-only SQL. Equal technician names now remain separate
+because ownership is identified by ID. The existing `assigned_to` name remains
+the displayed label. Run the migration in the Assigned Ticket Restrictions
+section below before using this version.
 
 Search, including numeric Ticket ID searches, operates within the selected view.
 Switching views keeps the submitted search and dashboard status filter. Clear
@@ -1363,8 +1364,8 @@ unlinked account through Manage Users, log out and back in to load that link int
 the session. Database failures show friendly feedback and allow retrying Refresh.
 Older background results are discarded when the user changes views or search.
 
-This is a viewing filter. Technician users can still access All Tickets and
-update any ticket with their existing permissions. Login/logout, account linking,
+Technician users can still access All Tickets, but may update or add notes only
+on tickets assigned to their linked Active technician record. Login/logout, account linking,
 Admin management, notes and their automatic authors, history, and the CLI keep
 their existing behavior.
 
@@ -1397,11 +1398,11 @@ Manual tests from the project directory in Git Bash:
    global. Clear Search should remove the status/search filters and stay in
    My Assigned Tickets. Rapidly switching views and submitting searches should
    leave only the latest requested results visible.
-6. Update one of your assigned tickets to reassign or unassign it, then confirm
-   the save. It should disappear automatically while the assigned view stays
+6. Reassign or unassign one of the Technician's tickets from an Admin session.
+   Refresh My Assigned Tickets; it should disappear while this view stays
    selected. Create a ticket in this view; creation must succeed, and switching
    to All Tickets should show the new unassigned ticket. Verify All Tickets
-   still lets the Technician update another technician's ticket.
+   lets the Technician view another technician's ticket but refuses to update it.
 7. Log in with an existing unlinked Technician account, if available. Click
    My Assigned Tickets; expect the contact-administrator message and an empty
    table. All Tickets must still work. Link the account using Admin Manage Users,
@@ -1418,5 +1419,140 @@ Manual tests from the project directory in Git Bash:
 
    ```bash
    .venv/Scripts/python.exe -m unittest discover -s tests -p '*my_assigned_tickets.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests
+   ```
+
+## Assigned Ticket Restrictions for Technician Users
+
+Admin users retain all existing ticket actions. Technician users can view and
+search all tickets, create tickets, use My Assigned Tickets, and view any ticket's
+history and notes. Updating details, status, or priority and adding notes now
+require the ticket's assignment ID to equal the session's linked technician ID.
+Only Admin users can assign, reassign, or unassign tickets through the GUI.
+The Technician update form displays the assignment in a readonly entry.
+
+For another technician's ticket, an unassigned ticket, or an unresolved legacy
+assignment, Update Ticket shows `You can only update tickets assigned to you.`
+Add Note shows `You can only add notes to tickets assigned to you.` Invalid,
+missing, or inactive technician links show the existing contact-administrator
+message. All Tickets, search, history, and viewing notes remain available.
+
+The checks run in action handlers, dialog loading and saving, and the repository
+transactions. Saving locks the ticket, rechecks the current Active user and
+technician record, and compares assignment IDs before writing. Reassignment or
+account/technician deactivation after loading a dialog prevents saving. A rejected
+save changes no ticket, history, or note data. Notes still use the Technician's
+automatic author, and do not change ticket status or add history entries. Admin
+notes retain the existing Active author selector.
+
+### Required migration
+
+The earlier schema stored only assignment names, which cannot establish secure
+ownership when technicians share names. `setup_ticket_assignments.py` adds only
+`helpdesk.tickets.assigned_technician_id` (nullable INT), an index, and a foreign
+key to `helpdesk.technicians.technician_id` with ON DELETE/UPDATE RESTRICT.
+Existing `assigned_to` names remain for display; Admin and CLI assignment changes
+now save or clear both values in the same transaction. Assignment ID is a system
+field and cannot be supplied as an ordinary editable field.
+
+Close running GUI and CLI instances before setup so an older version cannot
+continue saving assignments without IDs. From the project directory in Git Bash:
+
+```bash
+.venv/Scripts/python.exe setup_ticket_assignments.py
+```
+
+If the application MySQL account lacks the required setup privileges, use the
+existing private MySQL root connection helper:
+
+```bash
+winpty .venv/Scripts/python.exe setup_ticket_assignments.py --admin
+```
+
+Enter the root password at the hidden prompt. This retains configured helpdesk
+host/port/TLS settings and does not change `.env`. A terminal supporting hidden
+input can run the administrator command without `winpty`. No password belongs
+in a command argument.
+
+Setup is repeatable, reuses compatible schema elements, and can resume after a
+partial DDL failure. It does not replace incompatible columns or foreign keys.
+Legacy name assignments are linked only if exactly one technician record matches,
+including Inactive records. Grouping and matching explicitly convert names to
+`utf8mb4` with `utf8mb4_unicode_ci` so different source column collations do not
+cause error 1267. Case/accent-equivalent duplicate names remain ambiguous.
+This comparison does not alter either column's stored values or collation. Existing
+assignment IDs are never overwritten. Backfill preserves display names, ticket
+status/priority, timestamps, resolution times, history, and comments.
+
+Duplicate or unmatched names keep a NULL assignment ID. Setup reports their
+count. As Admin, open each affected ticket, select the intended Active technician
+from the assignment choices (rather than Keep current), and save with confirmation.
+This establishes the ID, even when the display name stays the same. Duplicate
+technician names are shown with IDs to distinguish the intended record. Tickets
+with unresolved legacy assignments remain visible to everyone but cannot be
+modified by Technician accounts. No name comparison grants edit or note access.
+
+If normal setup reports MySQL error 1142 or 1143, use the administrator command
+above. If a previous script run reported 1267, rerun the updated script using
+that same administrator command. It reuses already-created schema elements and
+retries the name backfill; no manual table recreation or collation changes are
+required.
+
+The CLI remains the existing operator tool, without GUI account restrictions.
+Its assignment writes maintain the new IDs. Login/logout, account management,
+password handling, dashboards, Delete permissions, technician management, automatic
+history, notes, and search/refresh behavior retain their existing functionality.
+
+### Manual tests
+
+1. Run setup, then run it again to verify repeatability. Resolve any reported
+   legacy assignments through Admin Update Ticket. Launch:
+
+   ```bash
+   .venv/Scripts/python.exe gui_app.py
+   ```
+
+2. As Admin, prepare two Active technicians and accounts linked to them. Create
+   three disposable tickets: one assigned to each technician and one unassigned.
+   Verify Admin can update any of them, assign/reassign/unassign, change status
+   and priority, add notes using any Active author, and use existing Delete and
+   management actions. History should still record actual changes.
+3. Log in as the first Technician. All Tickets and search should display all
+   three tickets, while My Assigned Tickets shows only their own. Select their
+   assigned ticket → Update Ticket. Assignment must be readonly, with no other
+   technician choices or unassign option. Edit subject, priority, and status;
+   confirm saving and verify the table/history refresh correctly. Resolving and
+   reopening should preserve the existing resolution timestamp behavior.
+4. Select the other technician's ticket → Update Ticket. Expect
+   `You can only update tickets assigned to you.` and no editable form/save.
+   Cancel the blocked dialog. Repeat with the unassigned ticket. Creating a new
+   unassigned ticket must still work, but the Technician cannot claim or edit it.
+5. View notes/history for each ticket; viewing must work regardless of assignment.
+   Add a valid note to the Technician's own ticket; verify the automatic author
+   and unchanged ticket status/history. Add Note on the other technician's or
+   unassigned ticket must show `You can only add notes to tickets assigned to you.`
+   Existing Technician Delete Ticket/Delete Note restrictions must remain.
+6. Leave an update or Add Note dialog open on an owned ticket. In a separate Admin
+   GUI session, reassign that ticket to the second technician. Attempt to save
+   from the first Technician's open dialog; expect the corresponding assignment
+   denial and no changes. Repeat with unassignment. Refresh My Assigned Tickets;
+   the ticket should disappear. Reassign it back as Admin to restore access.
+7. Test an existing unlinked Technician account, if available. Update and Add Note
+   must refuse with a contact-administrator message. All Tickets/history/notes
+   must remain viewable. Deactivate a linked technician record and verify its
+   existing assignments remain viewable while Update/Add Note are blocked;
+   reactivate it to restore modification access. Link changes require a fresh
+   login to load the correct session ID.
+8. To verify names cannot grant access, create two disposable technician records
+   with the same full name but distinct emails, link different accounts, and
+   assign separate tickets using their displayed IDs as Admin. Each Technician's
+   My Assigned Tickets and Update/Add Note access must follow their own ID.
+   Logout/login as Admin and Technician to verify permissions are fresh each time.
+9. Verify existing account controls, dashboard, search/Refresh, technicians, users,
+   ticket history/notes, and CLI. Run all tests without a live database:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p '*assigned_ticket_restrictions.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests -p '*setup_ticket_assignments.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests
    ```
