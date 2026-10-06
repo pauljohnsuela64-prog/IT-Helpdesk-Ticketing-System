@@ -18,6 +18,8 @@ def ticket(ticket_id=7):
 def viewer_without_window():
     viewer = gui.TicketViewer.__new__(gui.TicketViewer)
     viewer.root = MagicMock()
+    viewer.user = dict(user_id=7, username='test_account', full_name='Test Operator', role='Admin',
+                       status='Active', created_at=None, technician_id=None, technician_name=None)
     viewer.permissions = SessionPermissions({'role': 'Admin', 'status': 'Active'})
     viewer.tree = MagicMock()
     viewer.tree.selection.return_value = ()

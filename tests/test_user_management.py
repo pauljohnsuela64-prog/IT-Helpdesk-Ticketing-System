@@ -13,7 +13,7 @@ import user_repository as repo
 
 def user(user_id=7, role='Admin', status='Active'):
     return dict(user_id=user_id, username=f'test_user_{user_id}', full_name='Test Operator',
-                role=role, status=status, created_at=datetime(2026, 10, 6, 10, 30))
+                role=role, status=status, created_at=datetime(2026, 10, 6, 10, 30), technician_id=None, technician_name=None)
 
 
 class UserManagementRepositoryTests(unittest.TestCase):
@@ -41,7 +41,9 @@ class UserManagementRepositoryTests(unittest.TestCase):
         self.assertEqual(repo.get_users(7), [user(), user(12, 'Technician', 'Inactive')])
         self.assertEqual(self.cursor.execute.call_args_list[0].args[1], (7,))
         query, params = self.cursor.execute.call_args.args
-        self.assertEqual(query, 'SELECT user_id, username, full_name, role, status, created_at FROM helpdesk.users ORDER BY user_id')
+        self.assertIn('u.technician_id, t.full_name AS technician_name', query)
+        self.assertIn('LEFT JOIN helpdesk.technicians', query)
+        self.assertTrue(query.endswith('ORDER BY u.user_id'))
         self.assertEqual(params, ())
         for call in self.cursor.execute.call_args_list:
             self.assertNotIn('password', call.args[0])

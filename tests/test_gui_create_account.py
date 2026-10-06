@@ -38,6 +38,10 @@ def dialog_without_widgets(stage='create', first=False):
     dialog._first_account = first
     dialog._stage = stage
     dialog._widgets = [(MagicMock(), 'normal'), (MagicMock(), 'readonly')]
+    dialog._available_technicians = [dict(technician_id=12, full_name='Test Technician')]
+    dialog._technician_rows = []
+    dialog.technician_combo = MagicMock()
+    dialog.technician_combo.current.return_value = 0
     credential = secrets.token_urlsafe(32)
     values = {'username': '  new_account  ', 'full_name': '  New Operator  ', 'role': 'Technician',
               'password': credential, 'confirmation': credential,
@@ -85,7 +89,7 @@ class AccountRepositoryTests(unittest.TestCase):
         self.assertEqual(calls[1].args, ('SELECT COUNT(*) FROM helpdesk.users',))
         sql, params = calls[2].args
         self.assertEqual(params[0], 'new_account')
-        self.assertEqual(params[2:], ('New Operator', 'Admin'))
+        self.assertEqual(params[2:], ('New Operator', 'Admin', None))
         self.assertTrue(params[1] == self.stored)
         self.assertTrue(self.credential not in params and self.credential not in sql)
         self.assertNotIn('status', sql)
@@ -116,17 +120,18 @@ class AccountRepositoryTests(unittest.TestCase):
             with self.subTest(role=role):
                 self.cursor.reset_mock()
                 self.connection.reset_mock()
-                self.cursor.fetchone.side_effect = [(1,), (2,), (7,)]
+                technician_id = 12 if role == 'Technician' else None
+                self.cursor.fetchone.side_effect = [(1,), (2,), (7,)] + ([(12,), None] if technician_id else [])
                 with patch.object(repo, 'hash_password', return_value=self.stored):
                     self.assertEqual(repo.create_account("new'account", 'New Operator', role, self.credential,
-                                                        authorization=authorized_admin()), 15)
+                                                        authorization=authorized_admin(), technician_id=technician_id), 15)
                 admin_sql, admin_params = self.cursor.execute.call_args_list[2].args
                 self.assertIn('FOR UPDATE', admin_sql)
                 self.assertEqual(admin_params, (7, 'Admin', 'Active'))
                 insert_sql, params = self.cursor.execute.call_args.args
                 self.assertEqual(params[0], "new'account")
                 self.assertTrue(params[1] == self.stored)
-                self.assertEqual(params[2:], ('New Operator', role))
+                self.assertEqual(params[2:], ('New Operator', role, technician_id))
                 self.assertNotIn("new'account", insert_sql)
                 self.connection.commit.assert_called_once_with()
 
@@ -312,9 +317,10 @@ class AccountDialogTests(unittest.TestCase):
         dialog = dialog_without_widgets()
         credential = secrets.token_urlsafe(32)
         with patch.object(gui, 'create_account', return_value=15) as create:
-            dialog._create('new_account', 'New Operator', 'Technician', credential)
+            dialog._create('new_account', 'New Operator', 'Technician', credential, 12)
         self.assertTrue(create.call_count == 1 and create.call_args.args == ('new_account', 'New Operator', 'Technician', credential))
         self.assertIs(create.call_args.kwargs['authorization'], dialog._authorization)
+        self.assertEqual(create.call_args.kwargs['technician_id'], 12)
         grant = dialog._authorization
         with patch.object(gui.messagebox, 'showinfo') as message:
             dialog._check_creation()
@@ -370,10 +376,11 @@ class AccountDialogTests(unittest.TestCase):
                 stack.enter_context(patch.object(gui.ttk, 'Label'))
                 entries = stack.enter_context(patch.object(gui.ttk, 'Entry'))
                 combo = stack.enter_context(patch.object(gui.ttk, 'Combobox'))
+                stack.enter_context(patch.object(gui, 'Thread'))
                 dialog._show_account_form(first_account=first)
             self.assertEqual([call.kwargs.get('show') for call in entries.call_args_list], [None, None, '*', '*'])
             self.assertEqual(combo.call_args.kwargs['state'], 'readonly')
-            self.assertEqual(combo.call_args.kwargs['values'], ('Admin',) if first else ('Admin', 'Technician'))
+            self.assertEqual(combo.call_args_list[0].kwargs['values'], ('Admin',) if first else ('Admin', 'Technician'))
 
     def test_workers_never_print_credentials_or_access_widgets(self):
         dialog = dialog_without_widgets(stage='checking')

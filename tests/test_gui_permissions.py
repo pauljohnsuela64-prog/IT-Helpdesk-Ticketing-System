@@ -178,13 +178,14 @@ class NotesPermissionTests(unittest.TestCase):
     def test_technician_can_save_note_through_existing_validation_and_repository(self):
         dialog = note_dialog()
         dialog.owner.permissions = policy('Technician')
+        dialog.owner.user = {**account('Technician'), 'technician_id': 12}
         with patch.object(notes_gui, 'Thread') as worker:
             dialog.save()
         text = 'Checked network cable.\nConnection is stable now.'
-        worker.assert_called_once_with(target=dialog._add_note, args=(12, text), daemon=True)
-        with patch.object(notes_gui, 'add_ticket_comment', return_value=90) as add:
-            dialog._add_note(12, text)
-        add.assert_called_once_with(7, 12, text)
+        worker.assert_called_once_with(target=dialog._add_note, args=(None, text), daemon=True)
+        with patch.object(notes_gui, 'add_ticket_comment_for_user', return_value=90) as add:
+            dialog._add_note(None, text)
+        add.assert_called_once_with(7, 7, text, technician_id=None)
         self.assertEqual(dialog._results.get_nowait(), (90, None))
 
     def test_direct_delete_note_handler_is_blocked_even_with_selected_note(self):

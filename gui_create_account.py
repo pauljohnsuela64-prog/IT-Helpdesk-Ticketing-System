@@ -7,8 +7,9 @@ from tkinter import messagebox, ttk
 from input_validation import validate_text
 from password_security import validate_password
 from user_repository import (
-    USER_ROLES, UserAuthenticationError, UserCreateError, UserReadError,
-    authorize_account_creation, create_account, get_user_count, validate_user_details,
+    NO_AVAILABLE_TECHNICIANS, USER_ROLES, UserAuthenticationError, UserCreateError, UserReadError,
+    UserManagementPermissionError, authorize_account_creation, create_account,
+    get_available_technicians, get_user_count, validate_user_details,
 )
 
 
@@ -30,10 +31,12 @@ class CreateAccountDialog:
         self._stage = 'checking'
         self._fields = {}
         self._widgets = []
+        self._available_technicians = []
+        self._technician_rows = []
         self.window = tk.Toplevel(parent)
         self.window.title('Create Account — IT Help Desk')
-        self.window.geometry('620x650')
-        self.window.minsize(560, 610)
+        self.window.geometry('660x710')
+        self.window.minsize(600, 660)
         self.window.resizable(True, True)
         self.window.transient(parent)
         self.window.columnconfigure(0, weight=1)
@@ -79,6 +82,8 @@ class CreateAccountDialog:
             value.set('')
         self._fields = {}
         self._widgets = []
+        self._available_technicians = []
+        self._technician_rows = []
         for child in self.form.winfo_children():
             child.destroy()
 
@@ -118,12 +123,53 @@ class CreateAccountDialog:
                             values=('Admin',) if first_account else USER_ROLES, font=('Segoe UI', 11))
         role.grid(row=2, column=1, sticky='ew', pady=(0, 16))
         self._widgets.append((role, 'readonly'))
-        self._entry(3, 'password', 'Password', masked=True)
-        confirmation = self._entry(4, 'confirmation', 'Confirm Password', masked=True)
+        role.bind('<<ComboboxSelected>>', self._role_changed)
+        self.technician_label = ttk.Label(self.form, text='Linked Technician', style='Login.TLabel')
+        self.technician_label.grid(row=3, column=0, sticky='w', padx=(0, 16), pady=(0, 16))
+        self.technician_combo = ttk.Combobox(self.form, values=(), state='readonly', font=('Segoe UI', 11))
+        self.technician_combo.grid(row=3, column=1, sticky='ew', pady=(0, 16))
+        self._technician_rows = [self.technician_label, self.technician_combo]
+        self._widgets.append((self.technician_combo, 'readonly'))
+        self._entry(4, 'password', 'Password', masked=True)
+        confirmation = self._entry(5, 'confirmation', 'Confirm Password', masked=True)
         confirmation.bind('<Return>', self.save)
         self.action_button.configure(text='Create Account', command=self.save)
         self.action_button.state(['!disabled'])
         username.focus_set()
+        self._role_changed()
+        if not first_account:
+            self._start(self._load_technicians, (), self._check_technicians, 'Loading available technician records...')
+
+    def _role_changed(self, event=None):
+        technician_role = not self._first_account and self._fields['role'].get() == 'Technician'
+        for widget in self._technician_rows:
+            widget.grid() if technician_role else widget.grid_remove()
+        if technician_role:
+            self.feedback.set('Select an unlinked Active technician.' if self._available_technicians else NO_AVAILABLE_TECHNICIANS)
+        else:
+            self.feedback.set('')
+
+    def _load_technicians(self):
+        try:
+            technicians = get_available_technicians(authorization=self._authorization)
+        except (UserReadError, UserManagementPermissionError, ValueError) as error:
+            self._results.put((None, str(error)))
+        except Exception:
+            self._results.put((None, 'Unable to load available technicians. Cancel and reopen Create Account.'))
+        else:
+            self._results.put((technicians, None))
+
+    def _check_technicians(self):
+        result = self._result(self._check_technicians)
+        if result is None:
+            return
+        technicians, error = result
+        if error is not None:
+            self.feedback.set(error)
+            return
+        self._available_technicians = technicians
+        self.technician_combo.configure(values=tuple(f'{tech["full_name"]} (ID: {tech["technician_id"]})' for tech in technicians))
+        self._role_changed()
 
     def _set_busy(self, busy, saving=False):
         self._busy = busy
@@ -233,18 +279,27 @@ class CreateAccountDialog:
             validate_password(password)
             if password != confirmation:
                 raise ValueError('Password confirmation does not match. Please try again.')
+            technician_id = None
+            if role == 'Technician':
+                selection = self.technician_combo.current()
+                if not self._available_technicians:
+                    raise ValueError(NO_AVAILABLE_TECHNICIANS)
+                if not 0 <= selection < len(self._available_technicians):
+                    raise ValueError('Please select one of the listed Active technicians.')
+                technician_id = self._available_technicians[selection]['technician_id']
         except ValueError as error:
             self.feedback.set(str(error))
             return 'break'
-        self._start(self._create, (username, full_name, role, password), self._check_creation,
+        self._start(self._create, (username, full_name, role, password, technician_id), self._check_creation,
                     'Creating account...', saving=True)
         return 'break'
 
-    def _create(self, username, full_name, role, password):
+    def _create(self, username, full_name, role, password, technician_id=None):
         if self._closed:
             return
         try:
-            user_id = create_account(username, full_name, role, password, authorization=self._authorization)
+            user_id = create_account(username, full_name, role, password, authorization=self._authorization,
+                                     technician_id=technician_id)
         except (UserCreateError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:

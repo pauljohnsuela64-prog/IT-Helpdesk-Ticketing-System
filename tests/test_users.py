@@ -43,8 +43,8 @@ class UserRepositoryTests(unittest.TestCase):
         self.assertEqual(self.cursor.execute.call_args_list[0].args,
                          ('SELECT GET_LOCK(%s, %s)', ('helpdesk.users.create', 5)))
         sql, params = self.cursor.execute.call_args.args
-        self.assertTrue(sql == 'INSERT INTO helpdesk.users (username, password_hash, full_name, role) VALUES (%s, %s, %s, %s)')
-        self.assertTrue(params == ("Test'Account", self.stored, 'Test Operator', 'Admin'))
+        self.assertTrue(sql == 'INSERT INTO helpdesk.users (username, password_hash, full_name, role, technician_id) VALUES (%s, %s, %s, %s, %s)')
+        self.assertTrue(params == ("Test'Account", self.stored, 'Test Operator', 'Admin', None))
         self.assertTrue(self.credential not in sql and self.credential not in params)
         self.connection.commit.assert_called_once_with()
 
@@ -93,7 +93,7 @@ class UserRepositoryTests(unittest.TestCase):
                 self.assertTrue(set(user) == set(repo.PUBLIC_USER_FIELDS))
                 self.assertTrue('password_hash' not in user and 'password' not in user)
         query, params = self.cursor.execute.call_args.args
-        self.assertTrue(query.startswith('SELECT ') and query.endswith('WHERE username = %s LIMIT 1'))
+        self.assertTrue(query.startswith('SELECT ') and query.endswith('WHERE u.username = %s LIMIT 1'))
         self.assertTrue(params == ('test_account',))
         self.connection.commit.assert_not_called()
 

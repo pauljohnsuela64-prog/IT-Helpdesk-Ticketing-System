@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
+from gui_link_user_technician import LinkUserTechnicianDialog
 from user_repository import (
     USER_STATUSES, UserManagementPermissionError, UserReadError, UserUpdateError,
     get_user, get_users, public_user, update_user_status, validate_user_id,
@@ -17,6 +18,7 @@ USER_COLUMNS = (
     ('username', 'Username', 170, 130),
     ('full_name', 'Full Name', 240, 180),
     ('role', 'Role', 120, 100),
+    ('technician_name', 'Linked Technician', 210, 170),
     ('status', 'Status', 110, 100),
     ('created_at', 'Created At', 180, 160),
 )
@@ -77,15 +79,19 @@ class UserManagementWindow:
             row=0, column=0, sticky='w', pady=(0, 16))
         controls = ttk.Frame(content, style='Helpdesk.TFrame')
         controls.grid(row=1, column=0, sticky='ew', pady=(0, 16))
-        controls.columnconfigure(1, weight=1)
+        controls.columnconfigure(2, weight=1)
         self.change_button = ttk.Button(controls, text='Change User Status', command=self.open_status,
                                         style='Helpdesk.TButton')
         self.change_button.grid(row=0, column=0, padx=(0, 10))
         self.change_button.state(['disabled'])
+        self.link_button = ttk.Button(controls, text='Link Technician', command=self.open_link,
+                                      style='Helpdesk.TButton')
+        self.link_button.grid(row=0, column=1, padx=(0, 10))
+        self.link_button.state(['disabled'])
         self.refresh_button = ttk.Button(controls, text='Refresh', command=self.refresh, style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=2, padx=(0, 10))
+        self.refresh_button.grid(row=0, column=3, padx=(0, 10))
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
-        self.close_button.grid(row=0, column=3)
+        self.close_button.grid(row=0, column=4)
         table = ttk.Frame(content)
         table.grid(row=2, column=0, sticky='nsew')
         table.columnconfigure(0, weight=1)
@@ -115,6 +121,7 @@ class UserManagementWindow:
         self.feedback.set('Loading application users...')
         self.refresh_button.state(['disabled'])
         self.change_button.state(['disabled'])
+        self.link_button.state(['disabled'])
         Thread(target=self._load_users, daemon=True).start()
         self._poll_id = self.window.after(100, self._check_refresh)
 
@@ -148,6 +155,7 @@ class UserManagementWindow:
         allowed = self.permissions.allows('manage_users')
         self.refresh_button.state(['!disabled'] if allowed else ['disabled'])
         self.change_button.state(['!disabled'] if allowed and error is None else ['disabled'])
+        self.link_button.state(['!disabled'] if allowed and error is None else ['disabled'])
         if error is not None:
             self.feedback.set(error)
             return
@@ -197,6 +205,23 @@ class UserManagementWindow:
             messagebox.showinfo('Select a User', 'Please Refresh and select a valid user row.', parent=self.window)
             return
         self._child_dialog = ChangeUserStatusDialog(self, user_id)
+
+    def open_link(self):
+        if self._closed or not require_permission(self.permissions, 'manage_users', self.window):
+            return
+        if self._focus_child():
+            return
+        selection = self.tree.selection()
+        if len(selection) != 1:
+            messagebox.showinfo('Select a User', 'Please select one Technician user row before linking.', parent=self.window)
+            return
+        try:
+            user_id = int(selection[0])
+            validate_user_id(user_id)
+        except (TypeError, ValueError):
+            messagebox.showinfo('Select a User', 'Please Refresh and select a valid user row.', parent=self.window)
+            return
+        self._child_dialog = LinkUserTechnicianDialog(self, user_id)
 
     def focus(self):
         if not self._focus_child():

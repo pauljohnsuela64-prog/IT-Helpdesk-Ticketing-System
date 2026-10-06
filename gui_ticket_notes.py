@@ -10,9 +10,10 @@ from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permi
 from technician_repository import TechnicianReadError, get_active_technicians
 from ticket_comment_repository import (
     TicketCommentCreateError, TicketCommentDeleteError, TicketCommentReadError,
-    add_ticket_comment, delete_ticket_comment, get_ticket_comments, validate_comment_id,
+    add_ticket_comment_for_user, delete_ticket_comment, get_ticket_comments, validate_comment_id,
 )
 from ticket_repository import TicketReadError, get_ticket
+from user_repository import INVALID_TECHNICIAN_LINK, UserReadError, get_linked_active_technician, public_user
 
 
 NOTE_COLUMNS = (
@@ -45,8 +46,9 @@ def _ticket_summary(ticket_id, ticket):
 class TicketNotesWindow:
     """Modeless notes for one ticket, with modal add/delete forms."""
 
-    def __init__(self, parent, ticket_id, focus_other_dialog=None, permissions=None):
+    def __init__(self, parent, ticket_id, focus_other_dialog=None, permissions=None, user=None):
         self.parent = parent
+        self.user = public_user(user) if user is not None else None
         self.permissions = permissions if permissions is not None else SessionPermissions()
         self.ticket_id = ticket_id
         self._focus_other_dialog = focus_other_dialog
@@ -266,6 +268,8 @@ class TicketNotesWindow:
         return True
 
     def open_add(self):
+        if self._closed or not require_permission(self.permissions, 'add_note', self.window):
+            return
         if self._can_open_dialog():
             self._child_dialog = AddNoteDialog(self)
 
@@ -459,19 +463,39 @@ class AddNoteDialog(_NoteDialog):
         ttk.Label(self.form, text='Technician', style='Helpdesk.Status.TLabel').grid(
             row=0, column=0, sticky='w', pady=(0, 6),
         )
-        self.author = ttk.Combobox(self.form, values=(), state='disabled', font=('Segoe UI', 10))
-        self.author.grid(row=1, column=0, sticky='ew', pady=(0, 12))
-        self._widgets.append((self.author, 'readonly'))
+        self.author = None
+        self.author_name = None
+        if owner.user is not None and owner.user['role'] == 'Technician':
+            self.author_name = tk.StringVar(master=self.window, value='Checking your technician link...')
+            ttk.Label(self.form, textvariable=self.author_name, style='Helpdesk.Status.TLabel').grid(
+                row=1, column=0, sticky='ew', pady=(0, 12))
+        else:
+            self.author = ttk.Combobox(self.form, values=(), state='disabled', font=('Segoe UI', 10))
+            self.author.grid(row=1, column=0, sticky='ew', pady=(0, 12))
+            self._widgets.append((self.author, 'readonly'))
         ttk.Label(self.form, text='Note', style='Helpdesk.Status.TLabel').grid(row=2, column=0, sticky='w', pady=(0, 6))
         self._build_text(3)
         Thread(target=self._load_data, daemon=True).start()
         self._poll_id = self.window.after(100, self._check_load)
 
     def _load_data(self):
+        if not self.owner.permissions.allows('add_note'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
             ticket = get_ticket(self.ticket_id)
-            technicians = get_active_technicians() if ticket is not None else []
-        except (TicketReadError, TechnicianReadError, ValueError) as error:
+            technicians = []
+            if ticket is not None:
+                if self.owner.user is None:
+                    raise ValueError('Please log in again before adding a note.')
+                if self.owner.user['role'] == 'Technician':
+                    linked = get_linked_active_technician(self.owner.user['user_id'])
+                    if linked is None:
+                        raise ValueError(INVALID_TECHNICIAN_LINK)
+                    technicians = [linked]
+                else:
+                    technicians = get_active_technicians()
+        except (TicketReadError, TechnicianReadError, UserReadError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:
             self._results.put((None, 'Unable to load note author choices. Cancel and try again.'))
@@ -486,6 +510,14 @@ class AddNoteDialog(_NoteDialog):
             messagebox.showinfo('Ticket Not Found', 'No ticket found with that ID. No note was saved.', parent=self.parent)
             return False
         self.summary.set(_ticket_summary(self.ticket_id, ticket))
+        if self.owner.user is not None and self.owner.user['role'] == 'Technician':
+            if len(self._technicians) != 1:
+                self.feedback.set(INVALID_TECHNICIAN_LINK)
+                return False
+            tech = self._technicians[0]
+            self.author_name.set(f'{tech["full_name"]} (ID: {tech["technician_id"]})')
+            self.feedback.set('Your linked technician will be the note author. Enter the note.')
+            return True
         names = tuple(f'{tech["full_name"]} (ID: {tech["technician_id"]})' for tech in self._technicians)
         self.author.configure(values=names, state='readonly' if names else 'disabled')
         if not names:
@@ -497,21 +529,38 @@ class AddNoteDialog(_NoteDialog):
     def save(self):
         if self._closed or self._loading or self._saving or not self._ready:
             return
-        selection = self.author.current()
-        if not 0 <= selection < len(self._technicians):
-            self.feedback.set('Please select one of the listed Active technicians.')
+        if not require_permission(self.owner.permissions, 'add_note', self.window):
             return
+        technician_id = None
+        if self.owner.user is None:
+            self.feedback.set('Please log in again before adding a note.')
+            return
+        if self.owner.user['role'] == 'Technician':
+            if len(self._technicians) != 1:
+                self.feedback.set(INVALID_TECHNICIAN_LINK)
+                return
+        else:
+            selection = self.author.current()
+            if not 0 <= selection < len(self._technicians):
+                self.feedback.set('Please select one of the listed Active technicians.')
+                return
+            technician_id = self._technicians[selection]['technician_id']
         try:
             note = validate_comment_text(self.text.get('1.0', 'end-1c'))
         except ValueError as error:
             self.feedback.set(str(error))
             return
-        technician_id = self._technicians[selection]['technician_id']
         self._start_save(self._add_note, (technician_id, note), 'Saving note...')
 
     def _add_note(self, technician_id, note):
+        if not self.owner.permissions.allows('add_note'):
+            self._results.put((None, PERMISSION_DENIED))
+            return
         try:
-            comment_id = add_ticket_comment(self.ticket_id, technician_id, note)
+            if self.owner.user is None:
+                raise ValueError('Please log in again before adding a note.')
+            comment_id = add_ticket_comment_for_user(self.ticket_id, self.owner.user['user_id'], note,
+                                                    technician_id=technician_id)
         except (TicketCommentCreateError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:

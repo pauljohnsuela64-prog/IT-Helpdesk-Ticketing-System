@@ -10,6 +10,7 @@ import gui_ticket_notes as notes_gui
 import ticket_comment_repository as repository
 from gui_permissions import SessionPermissions
 from test_gui_app import ticket, viewer_without_window
+from test_gui_authentication import account
 
 
 def notes():
@@ -25,6 +26,7 @@ def notes():
 def window_without_widgets():
     window = notes_gui.TicketNotesWindow.__new__(notes_gui.TicketNotesWindow)
     window.parent = MagicMock()
+    window.user = account()
     window.permissions = SessionPermissions({'role': 'Admin', 'status': 'Active'})
     window.window = MagicMock()
     window.ticket_id = 7
@@ -104,7 +106,7 @@ class MainNotesTests(unittest.TestCase):
             viewer.open_ticket_notes()
             viewer.open_ticket_notes()
             window.assert_called_once_with(viewer.root, 7, viewer._focus_ticket_dialog,
-                                           permissions=viewer.permissions)
+                                           permissions=viewer.permissions, user=viewer.user)
             window.return_value.focus.assert_called_once_with()
             viewer.tree.selection.return_value = ('8',)
             viewer.open_ticket_notes()
@@ -349,7 +351,7 @@ class AddNoteTests(unittest.TestCase):
         self.assertFalse(dialog._ready)
         self.assertIn('No active technicians', dialog.feedback.set.call_args.args[0])
         dialog.author.configure.assert_called_once_with(values=(), state='disabled')
-        with patch.object(notes_gui, 'add_ticket_comment') as add:
+        with patch.object(notes_gui, 'add_ticket_comment_for_user') as add:
             dialog.save()
         add.assert_not_called()
         dialog = dialog_without_widgets()
@@ -377,7 +379,7 @@ class AddNoteTests(unittest.TestCase):
                 dialog = dialog_without_widgets()
                 dialog.author.current.return_value = author
                 dialog.text.get.return_value = note
-                with patch.object(notes_gui, 'Thread') as worker, patch.object(notes_gui, 'add_ticket_comment') as add:
+                with patch.object(notes_gui, 'Thread') as worker, patch.object(notes_gui, 'add_ticket_comment_for_user') as add:
                     dialog.save()
                 worker.assert_not_called()
                 add.assert_not_called()
@@ -399,9 +401,9 @@ class AddNoteTests(unittest.TestCase):
 
     def test_insert_worker_reuses_repository_and_does_not_access_widgets(self):
         dialog = dialog_without_widgets()
-        with patch.object(notes_gui, 'add_ticket_comment', return_value=90) as add:
+        with patch.object(notes_gui, 'add_ticket_comment_for_user', return_value=90) as add:
             dialog._add_note(12, 'Checked cable.')
-        add.assert_called_once_with(7, 12, 'Checked cable.')
+        add.assert_called_once_with(7, 7, 'Checked cable.', technician_id=12)
         self.assertEqual(dialog._results.get_nowait(), (90, None))
         self.assertEqual(dialog.window.mock_calls, [])
         self.assertEqual(dialog.text.mock_calls, [])
@@ -424,7 +426,7 @@ class AddNoteTests(unittest.TestCase):
             with self.subTest(error=type(error).__name__):
                 dialog = dialog_without_widgets()
                 dialog._saving = True
-                with patch.object(notes_gui, 'add_ticket_comment', side_effect=error), \
+                with patch.object(notes_gui, 'add_ticket_comment_for_user', side_effect=error), \
                      patch.object(dialog.owner, '_request_refresh') as refresh, patch.object(notes_gui.messagebox, 'showinfo') as message:
                     dialog._add_note(12, 'Checked cable.')
                     dialog._check_save()
@@ -578,7 +580,7 @@ class RepositoryIntegrationTests(unittest.TestCase):
         connection = MagicMock()
         connection.__enter__.return_value = connection
         cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchone.return_value = (51,)
+        cursor.fetchone.side_effect = [(7,), {'role': 'Admin', 'status': 'Active', 'technician_id': None}, (51,)]
         cursor.lastrowid = 90
         cursor.rowcount = 1
         add = dialog_without_widgets()

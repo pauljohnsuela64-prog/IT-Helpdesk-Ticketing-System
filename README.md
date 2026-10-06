@@ -678,9 +678,10 @@ Technician, and Comment. Select a note to read its complete, multiline text in t
 readonly pane below. Inactive authors' existing notes remain visible. An empty
 list displays `No notes found for this ticket.`
 
-**Add Note** opens a multiline note form with a readonly list of Active technicians.
-Names include technician IDs to distinguish duplicate names. Select an author;
-the existing shared validation trims the note and requires at least three letters
+**Add Note** opens a multiline note form. Admin users select from a readonly list
+of Active technicians; Technician users automatically use their linked Active
+technician record. Names include technician IDs to distinguish duplicate names.
+The existing shared validation trims the note and requires at least three letters
 or numbers, rejecting blank, short, or symbols-only text. Numeric notes such as
 `404` remain valid. With no Active technicians, saving is disabled and a friendly
 message explains how to add or reactivate one. Cancel closes without saving.
@@ -717,7 +718,7 @@ Manual checks (use disposable notes for deletion):
 2. Select a test ticket and open Ticket Notes. Check the Ticket ID, employee,
    subject, four columns, chronological order, scrollbars, and full-text pane.
    Compare with CLI option **8 → 1**. A ticket without notes shows the empty message.
-3. Click Add Note. Only Active technicians should appear, and typing a new author
+3. As an Admin, click Add Note. Only Active technicians should appear, and typing a new author
    name must be disabled. Select an author and try blank, spaces, `ab`, `a b`,
    `!!!`, and emoji-only text. Each should keep the form open without saving.
 4. Save `  Checked network cable.  `, then another multiline troubleshooting note.
@@ -945,9 +946,10 @@ calling the existing repositories. A blocked handler displays
 `You do not have permission to perform this action.` Notes Refresh keeps Delete
 Note disabled for Technicians while leaving Add Note available.
 
-Technician-role accounts may work with any ticket; application users are not
-linked to technician records. Note authors and assignment choices still come
-from Active technician records. Old assignments and notes from Inactive
+Technician-role accounts may work with any ticket. Their account link identifies
+the author of their GUI notes; it does not restrict ticket access. Admin note
+authors and ticket assignment choices come from Active technician records.
+Old assignments and notes from Inactive
 technicians remain visible. Existing CLI behavior and repository operations are
 unchanged; these permissions apply to authenticated GUI sessions.
 
@@ -1075,7 +1077,8 @@ Manual checks from Git Bash:
 After Admin login, **Manage Users** appears in the main header. Technician
 sessions do not display this button, and direct handler calls also check the
 session permission. The separate window shows User ID, Username, Full Name,
-Role, Status, and Created At, with Refresh, Change User Status, and Close.
+Role, Linked Technician, Status, and Created At, with Refresh, Change User Status,
+Link Technician, and Close.
 Inactive users remain visible. Repository reads select only public fields;
 passwords and password hashes are never loaded into this window.
 
@@ -1111,7 +1114,7 @@ Manual checks from the project directory in Git Bash:
    .venv/Scripts/python.exe gui_app.py
    ```
 
-2. Log in as A. Click Manage Users. Verify all six columns, including Inactive
+2. Log in as A. Click Manage Users. Verify all seven columns, including Inactive
    accounts, and no password/hash columns. Click Refresh. Without selecting a
    row, click Change User Status; expect a friendly selection message.
 3. Select T, choose Inactive, and click Save Changes. Choose No in confirmation;
@@ -1210,5 +1213,120 @@ Manual checks from the project directory in Git Bash:
 
    ```bash
    .venv/Scripts/python.exe -m unittest discover -s tests -p '*change_password.py' -v
+   .venv/Scripts/python.exe -m unittest discover -s tests
+   ```
+
+## Link Technician Accounts to Technician Records
+
+Application Technician accounts can now identify one existing technician record.
+Admin accounts have no technician link. This relationship is independent of
+`tickets.assigned_to`; all current ticket access and assignment rules remain.
+
+Apply the migration before launching this version, from the project directory
+in Git Bash:
+
+```bash
+.venv/Scripts/python.exe setup_user_technicians.py
+```
+
+If the normal MySQL application account lacks ALTER/INDEX/REFERENCES permission,
+run the same migration with the MySQL root administrator account instead:
+
+```bash
+winpty .venv/Scripts/python.exe setup_user_technicians.py --admin
+```
+
+Enter the MySQL root password only at the hidden prompt. The command retains
+the existing `.env` helpdesk host, port, and TLS settings, and does not modify
+`.env`. It never accepts a password as a command argument or prints credentials.
+If your terminal already supports hidden input, the administrator form also works
+without the `winpty` prefix. No SQL client command or new dependency is needed.
+
+The repeatable setup adds only `helpdesk.users.technician_id` (nullable INT), a
+unique index, and a foreign key to `helpdesk.technicians.technician_id` with
+ON DELETE/UPDATE RESTRICT. Multiple users can have NULL, but one technician can
+belong to at most one account. Existing rows retain NULL; no account is matched
+by name or email automatically. Existing compatible schema elements are reused.
+MySQL commits ALTER TABLE automatically, so interrupted partial setup can be
+rerun safely. Incompatible existing columns/keys are refused rather than replaced.
+Only metadata for the helpdesk tables is inspected.
+
+For new GUI accounts, Login → Create Account keeps its Active Admin authorization
+requirement. Choosing Admin hides technician selection. Choosing Technician
+requires selecting an Active, unlinked record from a readonly combobox. Names
+include IDs. If no record is available, create or reactivate an unlinked record
+through existing Manage Technicians, then reopen Create Account. The first
+application account remains an Admin and needs no technician record.
+
+To link an existing account, log in as Admin → Manage Users → select an unlinked
+Technician account → Link Technician → select an available Active record →
+Save Link → confirm Yes. The table refreshes and displays the Linked Technician
+name. Admin accounts and already-linked accounts are refused. Technician users
+cannot open or save this management action. Links cannot be removed or reassigned
+in this milestone. Inactive accounts still reserve their linked technician;
+deactivating an account does not allow its identity to be reused by another.
+
+Link saves and account creation recheck the acting Admin, target role, Active
+technician status, and ownership in the repository. They share the existing
+account-write lock and use a database unique constraint to prevent duplicate
+claims. Technician status changes do not erase existing links or old notes.
+
+After login, public session data includes `technician_id` and linked name alongside
+the existing user ID, username, full name, and role. Passwords/hashes remain
+excluded. A Technician's Add Note form displays their linked author without a
+technician chooser. Saving rechecks the current account/link and Active record
+in the note transaction. An absent, inactive, or otherwise invalid link blocks
+saving with `Your account has no valid Active technician link. Please contact an
+administrator.` Admins retain the existing Active technician selector, including
+records already linked to accounts. Note saves do not update tickets or history;
+old notes remain visible after technician deactivation.
+
+The CLI and `manage_users.py` keep their existing behavior. The administrator
+fallback can still create an unlinked Technician account; link it through Manage
+Users before it writes GUI notes. Login, Change Password, role restrictions,
+ticket CRUD, dashboard, technician management, history, and notes remain available.
+
+Manual tests:
+
+1. Run the migration command twice; both runs should succeed. Launch:
+
+   ```bash
+   .venv/Scripts/python.exe gui_app.py
+   ```
+
+2. As Admin, open Manage Users. Verify Linked Technician names or `-` for
+   unlinked accounts, including Inactive users, and no password/hash columns.
+   Link an existing unlinked Technician to a disposable Active record. Cancel
+   confirmation first and verify no change; repeat and confirm Yes. Expect the
+   refreshed linked name. Trying an Admin row or an already-linked account must
+   be refused. Trying Link Technician without selecting a row must be friendly.
+3. Logout → Create Account → authorize with an Active Admin. Choose Technician:
+   verify only Active, unlinked records appear, selection is readonly, and blank
+   selection is rejected. Choose one and create the account with your own
+   credentials. A second account must not offer that technician. Switch to Admin
+   and verify creation works without any technician selection. Existing password,
+   name, and duplicate-username validations still apply.
+4. If no available records exist in your test installation, choose Technician
+   and verify the friendly instruction to create/reactivate a technician. Admin
+   creation must still work. Create an Active technician through Manage
+   Technicians, then reopen Create Account and verify it becomes available.
+5. Login as a linked Technician. Open any ticket → Ticket Notes → Add Note. Verify
+   the linked name is displayed, no author chooser appears, and a valid saved note
+   uses that technician. Verify blank/short/meaningless notes still fail. Confirm
+   ticket status and automatic history did not change just from adding the note.
+6. Login as Admin, open that ticket's notes, and add a note using the existing
+   Active technician chooser. Old notes and Admin Delete Note still work. Return
+   to the linked Technician session and verify restricted actions remain blocked.
+7. Deactivate the linked technician record as Admin. Its account link and old
+   notes should remain visible. The Technician account can still log in, but Add
+   Note must display the contact-administrator message and refuse saving.
+   Reactivate the record; reopen Add Note and verify saving is available again.
+   An existing unlinked Technician account must also receive the contact message.
+8. Verify login/logout, Change Password, ticket CRUD/search/assignment, Refresh,
+   dashboard, technicians, history, and the CLI behave as before. Run all tests
+   without live database writes:
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests -p '*user_technician*.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests
    ```

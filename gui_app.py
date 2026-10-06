@@ -425,7 +425,7 @@ class TicketViewer:
                 return
             self._notes_window.close()
         self._notes_window = TicketNotesWindow(self.root, ticket_id, self._focus_ticket_dialog,
-                                              permissions=self.permissions)
+                                              permissions=self.permissions, user=self.user)
 
     def _refresh_after_deletion(self, ticket_id):
         if self._closed:

@@ -5,14 +5,17 @@ import mysql.connector
 from database import get_connection
 from input_validation import validate_text
 from password_security import DUMMY_PASSWORD_HASH, PasswordHashError, hash_password, validate_password, verify_password
+from technician_repository import validate_technician_id
 
 
 USER_ROLES = ('Admin', 'Technician')
 USER_STATUSES = ('Active', 'Inactive')
-PUBLIC_USER_FIELDS = ('user_id', 'username', 'full_name', 'role', 'status', 'created_at')
+PUBLIC_USER_FIELDS = ('user_id', 'username', 'full_name', 'role', 'status', 'created_at', 'technician_id', 'technician_name')
 CREATE_USERS_SQL = (Path(__file__).parent / 'database' / 'users.sql').read_text(encoding='utf-8').strip()
 CONFIGURATION_MESSAGE = 'Check your environment settings. DB_NAME must be helpdesk and all required connection settings must be supplied.'
-SETUP_MESSAGE = 'Run python setup_users.py or apply database/users.sql as the MySQL administrator to set up helpdesk.users.'
+SETUP_MESSAGE = 'Run python setup_users.py to set up helpdesk.users, then python setup_user_technicians.py to add the technician relationship.'
+NO_AVAILABLE_TECHNICIANS = 'No unlinked Active technicians are available. Create or reactivate an unlinked Active technician record first.'
+INVALID_TECHNICIAN_LINK = 'Your account has no valid Active technician link. Please contact an administrator.'
 
 
 class UserSetupError(Exception):
@@ -45,6 +48,10 @@ class UserStatusChangeError(UserUpdateError):
 
 class UserPasswordChangeError(Exception):
     """A safe error when a self-service password change cannot be confirmed."""
+
+
+class UserTechnicianLinkError(UserCreateError, UserUpdateError):
+    """A technician link is missing, unavailable, or inappropriate for the role."""
 
 
 class UserAuthorizationError(UserCreateError):
@@ -193,15 +200,17 @@ def _read_users(acting_user_id, user_id=None):
             with connection.cursor(dictionary=True) as cursor:
                 _require_active_admin(cursor, acting_user_id)
                 cursor.execute(
-                    'SELECT user_id, username, full_name, role, status, created_at FROM helpdesk.users '
-                    + ('ORDER BY user_id' if user_id is None else 'WHERE user_id = %s LIMIT 1'),
+                    'SELECT u.user_id, u.username, u.full_name, u.role, u.status, u.created_at, '
+                    'u.technician_id, t.full_name AS technician_name FROM helpdesk.users AS u '
+                    'LEFT JOIN helpdesk.technicians AS t ON t.technician_id = u.technician_id '
+                    + ('ORDER BY u.user_id' if user_id is None else 'WHERE u.user_id = %s LIMIT 1'),
                     () if user_id is None else (user_id,),
                 )
                 return [public_user(user) for user in cursor.fetchall()]
     except ValueError:
         raise UserReadError(CONFIGURATION_MESSAGE) from None
     except mysql.connector.Error as error:
-        if error.errno == 1146:
+        if error.errno in (1146, 1054):
             raise UserReadError(SETUP_MESSAGE) from None
         raise UserReadError('Unable to load application users. Please check the database connection and try again.') from None
 
@@ -276,19 +285,23 @@ def setup_users_table():
         ) from None
 
 
-def create_user(username, full_name, role, password):
+def create_user(username, full_name, role, password, technician_id=None):
     """Administrator/fallback tool; retain its existing unrestricted creation API."""
-    return _create_user(username, full_name, role, password, administrator_tool=True)
+    return _create_user(username, full_name, role, password, administrator_tool=True, technician_id=technician_id)
 
 
-def create_account(username, full_name, role, password, authorization=None):
+def create_account(username, full_name, role, password, authorization=None, technician_id=None):
     """GUI creation: bootstrap an Admin, otherwise require verified authorization."""
-    return _create_user(username, full_name, role, password, authorization=authorization)
+    return _create_user(username, full_name, role, password, authorization=authorization, technician_id=technician_id)
 
 
-def _create_user(username, full_name, role, password, authorization=None, administrator_tool=False):
+def _create_user(username, full_name, role, password, authorization=None, administrator_tool=False, technician_id=None):
     username, full_name, role = validate_user_details(username, full_name, role)
     validate_password(password)
+    if technician_id is not None:
+        validate_technician_id(technician_id)
+        if role != 'Technician':
+            raise ValueError('Only Technician accounts can be linked to a technician record.')
     try:
         password_hash = hash_password(password)
     except PasswordHashError as error:
@@ -306,6 +319,7 @@ def _create_user(username, full_name, role, password, authorization=None, admini
                         cursor.execute('SELECT COUNT(*) FROM helpdesk.users')
                         if cursor.fetchone()[0] == 0:
                             role = 'Admin'
+                            technician_id = None
                         else:
                             if not isinstance(authorization, _AccountAuthorization) or not authorization.active:
                                 raise UserAuthorizationError('Admin authorization is required. Cancel and reopen Create Account.')
@@ -316,10 +330,14 @@ def _create_user(username, full_name, role, password, authorization=None, admini
                             )
                             if cursor.fetchone() is None:
                                 raise UserAuthorizationError('Admin authorization is required. Cancel and reopen Create Account.')
+                            if role == 'Technician' and technician_id is None:
+                                raise UserTechnicianLinkError('Please select an unlinked Active technician for this account.')
+                    if technician_id is not None:
+                        _check_available_technician(cursor, technician_id)
                     cursor.execute(
-                        'INSERT INTO helpdesk.users (username, password_hash, full_name, role) '
-                        'VALUES (%s, %s, %s, %s)',
-                        (username, password_hash, full_name, role),
+                        'INSERT INTO helpdesk.users (username, password_hash, full_name, role, technician_id) '
+                        'VALUES (%s, %s, %s, %s, %s)',
+                        (username, password_hash, full_name, role, technician_id),
                     )
                     user_id = cursor.lastrowid
                 connection.commit()
@@ -334,8 +352,8 @@ def _create_user(username, full_name, role, password, authorization=None, admini
         raise UserCreateError(CONFIGURATION_MESSAGE) from None
     except mysql.connector.Error as error:
         if error.errno == 1062:
-            raise UserCreateError('A user with that username already exists.') from None
-        if error.errno == 1146:
+            raise UserCreateError('A user with that username already exists, or the technician is already linked. Please refresh and try again.') from None
+        if error.errno in (1146, 1054):
             raise UserCreateError(SETUP_MESSAGE) from None
         raise UserCreateError(
             f'Account creation could not be confirmed (MySQL error code: {error.errno}). '
@@ -354,14 +372,16 @@ def authenticate_user(username, password):
         with get_connection() as connection:
             with connection.cursor(dictionary=True) as cursor:
                 cursor.execute(
-                    'SELECT user_id, username, full_name, role, status, created_at, password_hash '
-                    'FROM helpdesk.users WHERE username = %s LIMIT 1', (username,),
+                    'SELECT u.user_id, u.username, u.full_name, u.role, u.status, u.created_at, u.password_hash, '
+                    'u.technician_id, t.full_name AS technician_name FROM helpdesk.users AS u '
+                    'LEFT JOIN helpdesk.technicians AS t ON t.technician_id = u.technician_id '
+                    'WHERE u.username = %s LIMIT 1', (username,),
                 )
                 user = cursor.fetchone()
     except ValueError:
         raise UserAuthenticationError(CONFIGURATION_MESSAGE) from None
     except mysql.connector.Error as error:
-        if error.errno == 1146:
+        if error.errno in (1146, 1054):
             raise UserAuthenticationError(SETUP_MESSAGE) from None
         raise UserAuthenticationError('Unable to sign in. Please check the database connection and try again.') from None
     try:
@@ -371,3 +391,105 @@ def authenticate_user(username, password):
     if not valid or user is None or user['status'] != 'Active':
         return None
     return public_user(user)
+
+
+def get_available_technicians(acting_user_id=None, authorization=None):
+    """Active, unclaimed records for an Active Admin or verified creation grant."""
+    if authorization is not None:
+        if not isinstance(authorization, _AccountAuthorization) or not authorization.active:
+            raise UserManagementPermissionError('Active Admin authorization is required.')
+        acting_user_id = authorization.user_id
+    validate_user_id(acting_user_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor(dictionary=True) as cursor:
+                _require_active_admin(cursor, acting_user_id)
+                cursor.execute(
+                    'SELECT t.technician_id, t.full_name, t.email FROM helpdesk.technicians AS t '
+                    'WHERE t.status = %s AND NOT EXISTS '
+                    '(SELECT 1 FROM helpdesk.users AS u WHERE u.technician_id = t.technician_id) '
+                    'ORDER BY t.technician_id', ('Active',),
+                )
+                return cursor.fetchall()
+    except ValueError:
+        raise UserReadError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno in (1146, 1054):
+            raise UserReadError(SETUP_MESSAGE) from None
+        raise UserReadError('Unable to load available technicians. Please refresh and try again.') from None
+
+
+def _check_available_technician(cursor, technician_id):
+    """Recheck and lock at save time, using either a plain or dictionary cursor."""
+    cursor.execute('SELECT technician_id FROM helpdesk.technicians '
+                   'WHERE technician_id = %s AND status = %s FOR UPDATE', (technician_id, 'Active'))
+    if cursor.fetchone() is None:
+        raise UserTechnicianLinkError('The technician is no longer available or Active. Please refresh and select another.')
+    cursor.execute('SELECT user_id FROM helpdesk.users WHERE technician_id = %s LIMIT 1', (technician_id,))
+    if cursor.fetchone() is not None:
+        raise UserTechnicianLinkError('This technician is already linked to another account. Please refresh and select another.')
+
+
+def link_user_technician(user_id, technician_id, acting_user_id):
+    """An Active Admin may link an unlinked Technician account to one record."""
+    validate_user_id(user_id)
+    validate_user_id(acting_user_id)
+    validate_technician_id(technician_id)
+    try:
+        with get_connection() as connection:
+            try:
+                with connection.cursor(dictionary=True) as cursor:
+                    cursor.execute('SELECT GET_LOCK(%s, %s) AS acquired', ('helpdesk.users.create', 5))
+                    if cursor.fetchone()['acquired'] != 1:
+                        raise UserTechnicianLinkError('User management is busy. Please try again.')
+                    _require_active_admin(cursor, acting_user_id, for_update=True)
+                    cursor.execute('SELECT role, technician_id FROM helpdesk.users WHERE user_id = %s FOR UPDATE', (user_id,))
+                    target = cursor.fetchone()
+                    if target is None:
+                        raise UserTechnicianLinkError('No user found with that ID.')
+                    if target['role'] != 'Technician':
+                        raise UserTechnicianLinkError('Only Technician accounts can be linked to a technician record.')
+                    if target['technician_id'] is not None:
+                        raise UserTechnicianLinkError('This account is already linked to a technician record.')
+                    _check_available_technician(cursor, technician_id)
+                    cursor.execute('UPDATE helpdesk.users SET technician_id = %s WHERE user_id = %s LIMIT 1',
+                                   (technician_id, user_id))
+                    if cursor.rowcount != 1:
+                        raise UserTechnicianLinkError('The link could not be confirmed. Please refresh before retrying.')
+                connection.commit()
+                return True
+            except (mysql.connector.Error, UserTechnicianLinkError, UserManagementPermissionError):
+                try:
+                    connection.rollback()
+                except mysql.connector.Error:
+                    pass
+                raise
+    except ValueError:
+        raise UserTechnicianLinkError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno in (1146, 1054):
+            raise UserTechnicianLinkError(SETUP_MESSAGE) from None
+        if error.errno == 1062:
+            raise UserTechnicianLinkError('This technician is already linked to another account. Please refresh.') from None
+        raise UserTechnicianLinkError('The technician link could not be confirmed. Please check the connection and refresh before retrying.') from None
+
+
+def get_linked_active_technician(user_id):
+    """Read the current valid note author, rather than trusting a session cache."""
+    validate_user_id(user_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor(dictionary=True) as cursor:
+                cursor.execute(
+                    'SELECT t.technician_id, t.full_name, t.email FROM helpdesk.users AS u '
+                    'JOIN helpdesk.technicians AS t ON t.technician_id = u.technician_id '
+                    'WHERE u.user_id = %s AND u.role = %s AND u.status = %s AND t.status = %s',
+                    (user_id, 'Technician', 'Active', 'Active'),
+                )
+                return cursor.fetchone()
+    except ValueError:
+        raise UserReadError(CONFIGURATION_MESSAGE) from None
+    except mysql.connector.Error as error:
+        if error.errno in (1146, 1054):
+            raise UserReadError(SETUP_MESSAGE) from None
+        raise UserReadError('Unable to check the technician link. Please try again.') from None

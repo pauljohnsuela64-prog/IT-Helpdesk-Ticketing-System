@@ -28,6 +28,7 @@ def manager_without_widgets(role='Admin'):
     manager.feedback = MagicMock()
     manager.refresh_button = MagicMock()
     manager.change_button = MagicMock()
+    manager.link_button = MagicMock()
     manager._results = Queue()
     manager._loading = False
     manager._closed = False
@@ -152,14 +153,14 @@ class MainUserManagementTests(unittest.TestCase):
 
 
 class UserTableTests(unittest.TestCase):
-    def test_row_formatter_contains_six_public_fields_only(self):
+    def test_row_formatter_contains_seven_public_fields_only(self):
         current = {**user(12, 'Technician', 'Inactive'), 'password': secrets.token_urlsafe(32),
                    'password_hash': secrets.token_hex(64)}
         values = gui.user_row_values(current)
-        self.assertEqual(values, ('12', 'test_user_12', 'Test Operator', 'Technician', 'Inactive', '2026-10-06 10:30'))
+        self.assertEqual(values, ('12', 'test_user_12', 'Test Operator', 'Technician', '-', 'Inactive', '2026-10-06 10:30'))
         self.assertEqual(gui.user_row_values({**current, 'full_name': 'José\nReyes', 'created_at': None})[2], 'José\\nReyes')
 
-    def test_construction_uses_single_selection_six_columns_scrollbars_and_only_three_actions(self):
+    def test_construction_uses_single_selection_seven_columns_scrollbars_and_link_action(self):
         with ExitStack() as stack:
             for name in ('Toplevel', 'StringVar'):
                 stack.enter_context(patch.object(gui.tk, name))
@@ -170,9 +171,9 @@ class UserTableTests(unittest.TestCase):
             buttons = stack.enter_context(patch.object(gui.ttk, 'Button'))
             refresh = stack.enter_context(patch.object(gui.UserManagementWindow, 'refresh'))
             manager = gui.UserManagementWindow(MagicMock(), user(), permissions=policy('Admin'))
-        self.assertEqual(tree.call_args.kwargs['columns'], ('user_id', 'username', 'full_name', 'role', 'status', 'created_at'))
+        self.assertEqual(tree.call_args.kwargs['columns'], ('user_id', 'username', 'full_name', 'role', 'technician_name', 'status', 'created_at'))
         self.assertEqual(tree.call_args.kwargs['selectmode'], 'browse')
-        self.assertEqual({call.kwargs['text'] for call in buttons.call_args_list}, {'Change User Status', 'Refresh', 'Close'})
+        self.assertEqual({call.kwargs['text'] for call in buttons.call_args_list}, {'Change User Status', 'Link Technician', 'Refresh', 'Close'})
         self.assertEqual([call.kwargs['orient'] for call in scrollbars.call_args_list], ['vertical', 'horizontal'])
         refresh.assert_called_once_with()
         self.assertTrue(manager.is_open)

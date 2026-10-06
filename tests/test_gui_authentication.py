@@ -14,7 +14,7 @@ from test_gui_app import ticket, viewer_without_window
 
 def account(role='Admin'):
     return dict(user_id=7, username='test_account', full_name='Test Operator', role=role,
-                status='Active', created_at=None)
+                status='Active', created_at=None, technician_id=None, technician_name=None)
 
 
 def login_without_widgets():
