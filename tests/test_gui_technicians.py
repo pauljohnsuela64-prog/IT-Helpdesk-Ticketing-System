@@ -35,6 +35,7 @@ def manager_without_window():
     manager._poll_id = None
     manager._refresh_pending = False
     manager._child_dialog = None
+    manager._on_change = None
     return manager
 
 
@@ -78,7 +79,7 @@ class MainWindowTests(unittest.TestCase):
             viewer.open_technician_management()
             viewer.open_technician_management()
             manager.return_value.focus.assert_called_once_with()
-            manager.assert_called_once_with(viewer.root)
+            manager.assert_called_once_with(viewer.root, on_change=viewer.dashboard.refresh)
             manager.return_value.is_open = False
             viewer.open_technician_management()
         self.assertEqual(manager.call_count, 2)

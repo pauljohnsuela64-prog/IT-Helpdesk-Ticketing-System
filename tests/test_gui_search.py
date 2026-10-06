@@ -22,6 +22,7 @@ def viewer_without_window():
     viewer.tree.get_children.return_value = ('previous-row',)
     viewer.tree.exists.return_value = False
     viewer.status = MagicMock()
+    viewer.dashboard = MagicMock()
     viewer.refresh_button = MagicMock()
     viewer.search_term = MagicMock()
     viewer.search_term.get.return_value = ''
@@ -37,6 +38,7 @@ def viewer_without_window():
     viewer._notes_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
+    viewer._active_status = ''
     viewer._loading_search = ''
     return viewer
 

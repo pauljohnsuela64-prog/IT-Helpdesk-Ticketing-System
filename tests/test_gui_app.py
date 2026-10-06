@@ -22,6 +22,7 @@ def viewer_without_window():
     viewer.tree.get_children.return_value = ()
     viewer.tree.exists.return_value = False
     viewer.status = MagicMock()
+    viewer.dashboard = MagicMock()
     viewer.refresh_button = MagicMock()
     viewer._results = Queue()
     viewer._loading = False
@@ -35,6 +36,7 @@ def viewer_without_window():
     viewer._notes_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
+    viewer._active_status = ''
     viewer._loading_search = ''
     viewer.search_term = MagicMock()
     viewer.search_term.get.return_value = ''
@@ -191,7 +193,7 @@ class GuiConstructionTests(unittest.TestCase):
     def test_headings_single_selection_scrollbars_refresh_and_initial_loading(self):
         root = MagicMock()
         vertical, horizontal = MagicMock(), MagicMock()
-        with patch.object(gui.ttk, 'Style'), patch.object(gui.ttk, 'Frame'), \
+        with patch.object(gui, 'DashboardPanel'), patch.object(gui.ttk, 'Style'), patch.object(gui.ttk, 'Frame'), \
              patch.object(gui.ttk, 'Label'), patch.object(gui.ttk, 'Entry') as entry, \
              patch.object(gui.ttk, 'Button') as button, \
              patch.object(gui.ttk, 'Treeview') as tree, \

@@ -35,8 +35,9 @@ def technician_row_values(technician):
 
 
 class TechnicianManagementWindow:
-    def __init__(self, parent):
+    def __init__(self, parent, on_change=None):
         self.parent = parent
+        self._on_change = on_change
         self._results = Queue()
         self._loading = False
         self._closed = False
@@ -169,6 +170,10 @@ class TechnicianManagementWindow:
             self._refresh_pending = True
         else:
             self.refresh()
+
+    def _notify_change(self):
+        if not self._closed and self._on_change is not None:
+            self._on_change()
 
     def _focus_child(self):
         if self._child_dialog is not None and self._child_dialog.is_open:
@@ -303,6 +308,7 @@ class _TechnicianDialog:
             return
         self._close()
         self.manager._request_refresh()
+        self.manager._notify_change()
         title, text = self._success_message(result)
         messagebox.showinfo(title, text, parent=self.parent)
 

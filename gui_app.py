@@ -6,12 +6,15 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from gui_create_ticket import CreateTicketDialog
+from gui_dashboard import DashboardPanel
+from gui_session import HelpDeskApplication
 from gui_delete_ticket import DeleteTicketDialog
 from gui_ticket_history import TicketHistoryWindow
 from gui_ticket_notes import TicketNotesWindow
 from gui_technicians import TechnicianManagementWindow
 from gui_update_ticket import UpdateTicketDialog
-from ticket_repository import TicketReadError, get_tickets, search_tickets, validate_ticket_id
+from ticket_repository import STATUSES, TicketReadError, get_tickets, search_tickets, validate_ticket_id
+from user_repository import public_user
 
 
 # Field, heading, preferred width, minimum width.
@@ -49,8 +52,10 @@ def ticket_row_values(ticket):
 class TicketViewer:
     """GUI interaction only; the existing repository handles database access."""
 
-    def __init__(self, root):
+    def __init__(self, root, user=None, on_logout=None):
         self.root = root
+        self.user = public_user(user) if user is not None else None
+        self._on_logout = on_logout
         self._results = Queue()
         self._loading = False
         self._closed = False
@@ -64,10 +69,11 @@ class TicketViewer:
         self._refresh_pending = False
         self._active_search = ''
         self._loading_search = ''
+        self._active_status = ''
 
         root.title('IT Help Desk Ticketing System')
-        root.geometry('1240x720')
-        root.minsize(900, 480)
+        root.geometry('1240x840')
+        root.minsize(900, 640)
         root.resizable(True, True)
         root.configure(background=BACKGROUND)
         root.columnconfigure(0, weight=1)
@@ -98,12 +104,18 @@ class TicketViewer:
         style.configure('Helpdesk.Treeview', rowheight=30, font=('Segoe UI', 10),
                         background='white', fieldbackground='white')
         style.configure('Helpdesk.Treeview.Heading', font=('Segoe UI', 10, 'bold'))
+        style.configure('Dashboard.Card.TFrame', background='white')
+        style.configure('Dashboard.Title.TLabel', background='white',
+                        foreground='#526176', font=('Segoe UI', 10))
+        style.configure('Dashboard.Count.TLabel', background='white',
+                        foreground='#182a43', font=('Segoe UI', 22, 'bold'))
 
     def _build_widgets(self):
         content = ttk.Frame(self.root, padding=(24, 20, 24, 16), style='Helpdesk.TFrame')
+        self.content = content
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
-        content.rowconfigure(3, weight=1)
+        content.rowconfigure(4, weight=1)
 
         header = ttk.Frame(content, style='Helpdesk.TFrame')
         header.grid(row=0, column=0, sticky='ew', pady=(0, 22))
@@ -115,9 +127,18 @@ class TicketViewer:
         self.technician_button = ttk.Button(header, text='Manage Technicians',
                                             command=self.open_technician_management, style='Helpdesk.TButton')
         self.technician_button.grid(row=1, column=1, sticky='e', padx=(16, 0))
+        if self.user is not None:
+            name = ''.join(character if character.isprintable() else ' ' for character in self.user['full_name'])
+            ttk.Label(header, text=f'Logged in as: {name} ({self.user["role"]})', wraplength=730,
+                      style='Helpdesk.Status.TLabel').grid(row=2, column=0, sticky='w', pady=(10, 0))
+            self.logout_button = ttk.Button(header, text='Logout', command=self.logout, style='Helpdesk.TButton')
+            self.logout_button.grid(row=2, column=1, sticky='e', padx=(16, 0), pady=(10, 0))
+
+        self.dashboard = DashboardPanel(content, self.filter_by_status)
+        self.dashboard.frame.grid(row=1, column=0, sticky='ew', pady=(0, 18))
 
         toolbar = ttk.Frame(content, style='Helpdesk.TFrame')
-        toolbar.grid(row=1, column=0, sticky='ew', pady=(0, 12))
+        toolbar.grid(row=2, column=0, sticky='ew', pady=(0, 12))
         toolbar.columnconfigure(0, weight=1)
         ttk.Label(toolbar, text='Tickets', style='Helpdesk.Section.TLabel').grid(
             row=0, column=0, sticky='w',
@@ -142,7 +163,7 @@ class TicketViewer:
         self.refresh_button.grid(row=0, column=6, sticky='e')
 
         search_area = ttk.Frame(content, style='Helpdesk.TFrame')
-        search_area.grid(row=2, column=0, sticky='ew', pady=(0, 12))
+        search_area.grid(row=3, column=0, sticky='ew', pady=(0, 12))
         search_area.columnconfigure(1, weight=1)
         ttk.Label(search_area, text='Search tickets', style='Helpdesk.Status.TLabel').grid(
             row=0, column=0, sticky='w', padx=(0, 12),
@@ -159,7 +180,7 @@ class TicketViewer:
         self.clear_search_button.grid(row=0, column=3)
 
         table = ttk.Frame(content)
-        table.grid(row=3, column=0, sticky='nsew')
+        table.grid(row=4, column=0, sticky='nsew')
         table.columnconfigure(0, weight=1)
         table.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(table, columns=tuple(column[0] for column in TICKET_COLUMNS),
@@ -178,7 +199,14 @@ class TicketViewer:
 
         self.status = tk.StringVar(master=self.root, value='Ready.')
         ttk.Label(content, textvariable=self.status, style='Helpdesk.Status.TLabel',
-                  wraplength=820, anchor='w').grid(row=4, column=0, sticky='ew', pady=(12, 0))
+                  wraplength=820, anchor='w').grid(row=5, column=0, sticky='ew', pady=(12, 0))
+
+    def filter_by_status(self, status):
+        if self._closed or (status and status not in STATUSES):
+            return
+        self._active_status = status
+        self.dashboard.set_status_filter(status)
+        self._request_refresh()
 
     def perform_search(self, event=None):
         if not self._closed:
@@ -192,11 +220,14 @@ class TicketViewer:
             return
         self.search_term.set('')
         self._active_search = ''
+        self._active_status = ''
+        self.dashboard.set_status_filter('')
         self._request_refresh()
 
     def refresh_tickets(self):
         if self._closed or self._loading:
             return
+        self.dashboard.refresh()
         self._loading = True
         self._loading_search = self._active_search
         self.status.set('Searching tickets...' if self._active_search else 'Loading tickets...')
@@ -292,7 +323,7 @@ class TicketViewer:
             if dialog is not None and dialog.is_open:
                 dialog.focus()
                 return
-        self._technician_window = TechnicianManagementWindow(self.root)
+        self._technician_window = TechnicianManagementWindow(self.root, on_change=self.dashboard.refresh)
 
     def open_ticket_history(self):
         if self._closed or self._focus_notes_dialog():
@@ -371,10 +402,15 @@ class TicketViewer:
             return
         if self._loading:
             self._refresh_pending = True
+            self.dashboard.refresh()
         else:
             self.refresh_tickets()
 
     def _display_tickets(self, tickets):
+        # Apply an exact status to the complete results of the existing list/search.
+        # Summary cards always use independent global database aggregates.
+        if self._active_status:
+            tickets = [ticket for ticket in tickets if ticket.get('status') == self._active_status]
         selection = self.tree.selection()
         children = self.tree.get_children()
         if children:
@@ -386,37 +422,53 @@ class TicketViewer:
             self.tree.selection_set(selection[0])
             self.tree.focus(selection[0])
         count = len(tickets)
-        if self._active_search:
+        if self._active_status:
+            self.status.set(f'{count} {self._active_status} ticket{"s" if count != 1 else ""} '
+                            f'{"matched the search" if self._active_search else "loaded"}.'
+                            if count else f'No {self._active_status} tickets '
+                            f'{"matched the search" if self._active_search else "found"}.')
+        elif self._active_search:
             self.status.set(f'{count} matching ticket{"s" if count != 1 else ""} found.'
                             if count else 'No matching tickets found.')
         else:
             self.status.set(f'{count} ticket{"s" if count != 1 else ""} loaded.'
                             if count else 'No tickets found.')
 
-    def close(self):
+    def _stop_session(self):
         if self._closed:
-            return
+            return False
         dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window,
                    self._notes_window)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()
-                return
+                return False
         for dialog in dialogs:
             if dialog is not None and dialog.is_open:
                 dialog.cancel()
         if self._history_window is not None and self._history_window.is_open:
             self._history_window.close()
         self._closed = True
+        self.dashboard.close()
         if self._poll_id is not None:
             self.root.after_cancel(self._poll_id)
             self._poll_id = None
-        self.root.destroy()
+        self.user = None
+        return True
+
+    def logout(self):
+        if self._on_logout is not None and self._stop_session():
+            self.content.destroy()
+            self._on_logout()
+
+    def close(self):
+        if self._stop_session():
+            self.root.destroy()
 
 
 def main():
     root = tk.Tk()
-    TicketViewer(root)
+    HelpDeskApplication(root, TicketViewer)
     root.mainloop()
 
 

@@ -259,18 +259,21 @@ From the project directory in Git Bash, launch the separate Tkinter application:
 ```
 
 With your Python environment already active, `python gui_app.py` also works.
+The GUI now opens the Login screen first. Create the users table and your initial
+account using the Authentication Foundation instructions below before signing in.
 Tkinter and ttk are included with the project's Windows Python installation;
 no additional GUI package or database migration is needed. The viewer uses the
 existing `.env` settings and accepts only `DB_NAME=helpdesk` through the shared
 database connection function.
 
-The resizable 1240 × 720 window displays Ticket ID, Employee, Department, Category,
+The resizable 1240 × 840 window displays Ticket ID, Employee, Department, Category,
 Subject, Priority, Status, Assigned To, and Created At. It loads tickets on startup.
 Use Refresh to reload from MySQL, the scrollbars to browse larger tables, and click
 one row to select it. Database reads run in a background thread so the window
 remains responsive. Failed refreshes show a friendly status message and retain
 the last successful rows. The GUI supports viewing, creating, searching, updating,
-and deleting tickets, plus technician management, ticket history, and ticket notes. The
+and deleting tickets, plus technician management, ticket history, ticket notes,
+and a Help Desk dashboard. The
 existing CLI remains available with `python app.py`.
 
 Manual checks:
@@ -738,3 +741,187 @@ Manual checks (use disposable notes for deletion):
    features still work.
 9. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Automated tests
    need neither an interactive GUI session nor live database changes.
+
+## Help Desk Dashboard in the GUI
+
+Eight summary cards above the existing ticket controls display **Total Tickets**,
+**Open**, **Assigned**, **In Progress**, **Resolved**, **Closed**, **Critical Priority**,
+and **Active Technicians**. These are global counts from the existing helpdesk
+tables, independent of ticket searches or status filters. Critical Priority counts
+all Critical tickets, including Resolved and Closed tickets. Active Technicians
+counts only technicians whose status is Active.
+
+`dashboard_repository.py` loads all eight counts with one read-only parameterized
+SELECT. A separate technician count avoids multiplying tickets through a join.
+No database schema, setup command, or dependency change is needed. The existing
+shared connection continues to accept only `DB_NAME=helpdesk`.
+
+`gui_dashboard.py` handles the card layout and background reads. Statistics load
+at startup and refresh automatically after successful ticket creation, updates,
+and deletion, and after technician additions and status saves. The main **Refresh**
+button reloads both statistics and the ticket table, preserving current search
+and status filters. Reads arriving from before a save are discarded and followed
+by a fresh read. Failed dashboard reads retain previously loaded counts and show
+friendly feedback; before the first successful load, cards show a dash instead
+of an incorrect zero. Ticket-table loading and dashboard loading are independent.
+
+Click **Open**, **Assigned**, **In Progress**, **Resolved**, or **Closed** to filter
+the existing table by that exact status. Only the ticket's Status field is used;
+an Open card does not match the word "Open" in a Closed ticket's subject. The
+status filter combines with an existing text search, and the dashboard identifies
+the selected status. Clicking **Total Tickets** clears only the status filter,
+preserving text search. **Clear Search** clears both filters and restores the full
+ticket list. Cards also accept keyboard focus with Tab and activate with Enter or
+Space. Critical Priority and Active Technicians are informational cards.
+
+The dashboard does not change tickets, assignments, history, or notes. Existing
+CLI commands and all existing GUI windows remain available. Closing the main
+window cancels pending dashboard callbacks; late worker results are ignored.
+
+Manual checks (use disposable tickets for changes):
+
+1. In Git Bash, launch `.venv/Scripts/python.exe gui_app.py`. Check all eight cards
+   above the table, resize the window, and compare counts with View Tickets and
+   View Technicians. Zero counts should display `0` after a successful load.
+2. Create a disposable Critical ticket. Total Tickets, Open, and Critical Priority
+   should each increase by one automatically. Other status counts should remain.
+3. Assign an Active technician to that Open ticket and save. Open should decrease
+   and Assigned should increase automatically. Move it to In Progress, then
+   Resolved, then Closed; each save should decrease the previous status count and
+   increase the new status count. The Critical count should remain unchanged.
+4. Change its priority from Critical to High. Critical Priority should decrease,
+   with no change in Total Tickets or status counts. Delete the disposable ticket
+   after confirmation; Total Tickets and Closed should decrease automatically.
+   Cancelling ticket creation, an update, or deletion must not change counts.
+5. Open Manage Technicians and change an Active technician to Inactive after
+   confirmation. Active Technicians should decrease without clicking Refresh.
+   Reactivate them and expect it to increase. Adding an Active technician also
+   updates the count. Existing ticket assignments and old notes should remain.
+6. Click Open, Resolved, and other status cards. Every visible row should have
+   the exact selected status; counts must remain global. With a text search active,
+   click a status card and verify both filters apply. Total Tickets clears only
+   status; Clear Search restores all tickets. Test Tab, Enter, and Space on cards.
+7. Make a change through `.venv/Scripts/python.exe app.py`, then click the main
+   Refresh button. Both counts and ticket rows should reflect it while preserving
+   current filters. Check View History and Ticket Notes still work; adding or
+   deleting a note should leave ticket counts and status unchanged.
+8. With MySQL temporarily unavailable, click Refresh. Expect friendly messages,
+   retained counts and previous rows, and a responsive GUI. Restore MySQL and
+   Refresh again. Closing during a dashboard read should remain safe.
+9. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Tests use mocks
+   and require neither an interactive GUI session nor live database changes.
+
+## Authentication Foundation / GUI Login
+
+The GUI entry point now opens a **Login** screen before loading any tickets or
+dashboard data. Sign in using an Active application account created by
+`manage_users.py`. Username input is trimmed; password input is masked and retains
+its exact characters, including surrounding spaces. Click Login or press Enter
+in the password field. Unknown usernames, incorrect passwords, and Inactive
+accounts all display `Invalid username or password.` Database errors display safe
+connection/setup guidance and keep the Login screen open. Exit closes the program.
+
+After successful login, the existing main GUI displays the user's full name and
+role with a **Logout** button. Admin and Technician have the same GUI features in
+this milestone; roles are stored as session information. Logout closes child
+windows, clears session state, and returns to an empty Login screen using the
+same application process. Pending ticket/technician/note writes must finish
+before logout; closing a session cancels its pending GUI read callbacks and ignores
+late results. Logging in again starts a fresh table, search, and dashboard session.
+The existing CLI continues to run through `.venv/Scripts/python.exe app.py`.
+
+Passwords are stored only as salted scrypt hashes using Python's standard library
+(`N=131072`, `r=8`, `p=1`, a fresh 16-byte random salt, and a 32-byte derived key).
+These settings follow the [OWASP password-storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+Verification uses a constant-time comparison; unknown users still run the same
+bounded derivation. Hash formats are validated before use so malformed parameters
+cannot request an unbounded amount of memory. Passwords cannot be blank or exceed
+1024 UTF-8 bytes; they are never silently shortened or normalized. Passwords and
+hashes are never printed or included in GUI session data. No additional hashing
+package is required.
+
+Create the users table from the project directory in Git Bash:
+
+```bash
+.venv/Scripts/python.exe setup_users.py
+```
+
+The idempotent script creates only `helpdesk.users`, with the requested identity,
+hash, full-name, role, status, and timestamp fields. Existing tables remain
+unchanged. If the application's MySQL account does not have CREATE permission,
+use the installed MySQL 8.0 administrator client instead:
+
+```bash
+"/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe" -h 127.0.0.1 -P 3306 -u root -p helpdesk < database/users.sql
+```
+
+Enter the MySQL root password only when prompted. Run this from the project
+directory; adjust host/port if your helpdesk database uses a different server.
+The SQL file contains no account inserts or credentials and safely tolerates
+an existing users table.
+
+Create your first application account interactively in Git Bash:
+
+```bash
+winpty .venv/Scripts/python.exe manage_users.py
+```
+
+Enter your chosen Username, Full name, and either Admin or Technician, then enter
+and confirm your password at the hidden prompts. `winpty` gives Windows Python
+a console for reliable hidden input in Git Bash. In a terminal that already
+supports hidden input, `.venv/Scripts/python.exe manage_users.py` also works.
+If hidden input is unavailable, the script stops before an echoing fallback can
+read the password. No username or password is supplied by default or accepted
+through command arguments. Names require at least one letter; blank inputs,
+invalid roles, mismatched confirmation, and duplicate usernames are rejected.
+User IDs, Active status, and creation timestamps are generated by MySQL. Success
+prints only the new User ID. Run the script again to create another account.
+
+Launch the GUI:
+
+```bash
+.venv/Scripts/python.exe gui_app.py
+```
+
+Manual login/logout checks:
+
+1. Run the setup command twice; both should succeed without changing existing
+   tables or users. Create your account with the interactive script. Try a blank
+   username, a name made only of numbers/symbols, an unsupported role, a blank
+   password, and mismatched confirmation. Re-running creation with the same
+   username should report a duplicate; no password or hash should appear.
+2. Launch the GUI. Only Login should appear. Verify password masking. Try blank
+   fields, a nonexistent username, and an incorrect password for your account;
+   all should show the generic invalid-credentials message without opening tickets.
+3. Enter the application account you created. Press Enter in the password field;
+   expect the main GUI, the correct full name/role, all eight dashboard cards, and
+   all existing buttons. Also test Login by clicking its button.
+4. Open history and notes, set a ticket search/status filter, then Logout. Expect
+   those windows to close, a blank Login screen, and no ticket rows visible. Log
+   in again and expect a fresh session with no previous filters. Repeat with an
+   account created with the other supported role; all current features remain.
+5. For the Inactive test, use your MySQL administrator console to run the following
+   after replacing `YOUR_TEST_USER_ID` with the numeric ID printed during creation:
+
+   ```sql
+   UPDATE helpdesk.users SET status = 'Inactive' WHERE user_id = YOUR_TEST_USER_ID;
+   ```
+
+   Log out and attempt login with that account's correct password; expect the same
+   generic invalid-credentials message. Restore the test account afterward:
+
+   ```sql
+   UPDATE helpdesk.users SET status = 'Active' WHERE user_id = YOUR_TEST_USER_ID;
+   ```
+
+6. Check GUI Create, Search, Update, Delete, technician management, history,
+   notes, dashboard, and Refresh. Cancel unsaved forms and verify logout safely
+   closes remaining windows. A save already in progress must finish before the
+   session can close. The existing CLI must still work independently.
+7. With MySQL temporarily unavailable, try Login; expect friendly connection
+   feedback without a crash. Restore MySQL and try again. Exit, the window close
+   button, and closing during a pending login should exit without opening the GUI
+   later. Close the main GUI's window to exit the program normally.
+8. Run `.venv/Scripts/python.exe -m unittest discover -s tests -v`. Authentication
+   tests generate ephemeral credentials only in memory and use mocked database
+   connections; the suite requires no interactive GUI or live database changes.
