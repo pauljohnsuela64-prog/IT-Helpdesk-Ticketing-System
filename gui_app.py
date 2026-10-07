@@ -11,6 +11,8 @@ from gui_dashboard import DashboardPanel
 from gui_session import HelpDeskApplication
 from gui_delete_ticket import DeleteTicketDialog
 from gui_permissions import SessionPermissions, require_permission
+from gui_reports import ReportsWindow
+from report_repository import ReportPermissionError
 from gui_ticket_history import TicketHistoryWindow
 from gui_ticket_notes import TicketNotesWindow
 from gui_technicians import TechnicianManagementWindow
@@ -75,6 +77,7 @@ class TicketViewer:
         self._password_dialog = None
         self._history_window = None
         self._notes_window = None
+        self._reports_window = None
         self._refresh_pending = False
         self._active_search = ''
         self._loading_search = ''
@@ -139,6 +142,11 @@ class TicketViewer:
                   style='Helpdesk.Subtitle.TLabel').grid(row=1, column=0, sticky='w', pady=(6, 0))
         header.columnconfigure(0, weight=1)
         self.user_button = None
+        self.reports_button = None
+        if self.permissions.allows('reports'):
+            self.reports_button = ttk.Button(header, text='Reports', command=self.open_reports,
+                                             style='Helpdesk.TButton')
+            self.reports_button.grid(row=0, column=2, sticky='e', padx=(10, 0), pady=(0, 6))
         if self.permissions.allows('manage_users'):
             self.user_button = ttk.Button(header, text='Manage Users', command=self.open_user_management,
                                           style='Helpdesk.TButton')
@@ -427,6 +435,19 @@ class TicketViewer:
             return
         self._user_window = UserManagementWindow(self.root, self.user, permissions=self.permissions)
 
+    def open_reports(self):
+        if self._closed or not require_permission(self.permissions, 'reports', self.root):
+            return
+        if self._focus_notes_dialog() or self._focus_ticket_dialog():
+            return
+        if self._reports_window is not None and self._reports_window.is_open:
+            self._reports_window.focus()
+            return
+        try:
+            self._reports_window = ReportsWindow(self.root, self.user, permissions=self.permissions)
+        except ReportPermissionError as error:
+            messagebox.showinfo('Permission Denied', str(error), parent=self.root)
+
     def open_change_password(self):
         if self._closed or not require_permission(self.permissions, 'change_password', self.root):
             return
@@ -554,7 +575,7 @@ class TicketViewer:
         if self._closed:
             return False
         dialogs = (self._create_dialog, self._update_dialog, self._delete_dialog, self._technician_window,
-                   self._user_window, self._password_dialog, self._notes_window)
+                   self._user_window, self._password_dialog, self._notes_window, self._reports_window)
         for dialog in dialogs:
             if dialog is not None and dialog.is_open and dialog.is_saving:
                 dialog.focus()

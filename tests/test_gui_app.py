@@ -40,6 +40,7 @@ def viewer_without_window():
     viewer._password_dialog = None
     viewer._history_window = None
     viewer._notes_window = None
+    viewer._reports_window = None
     viewer._refresh_pending = False
     viewer._active_search = ''
     viewer._active_status = ''

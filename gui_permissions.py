@@ -7,7 +7,9 @@ TECHNICIAN_PERMISSIONS = frozenset({
     'dashboard', 'view_tickets', 'search_tickets', 'create_ticket', 'update_ticket',
     'view_history', 'view_notes', 'add_note', 'refresh', 'change_password',
 })
-ADMIN_PERMISSIONS = TECHNICIAN_PERMISSIONS | {'delete_ticket', 'manage_technicians', 'delete_note', 'manage_users'}
+ADMIN_PERMISSIONS = TECHNICIAN_PERMISSIONS | {
+    'delete_ticket', 'manage_technicians', 'delete_note', 'manage_users', 'reports', 'export_reports',
+}
 ROLE_PERMISSIONS = {'Admin': ADMIN_PERMISSIONS, 'Technician': TECHNICIAN_PERMISSIONS}
 
 

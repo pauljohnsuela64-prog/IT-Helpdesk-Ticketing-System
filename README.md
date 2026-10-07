@@ -1636,3 +1636,94 @@ its user reference; this milestone does not add user deletion.
    ```bash
    .venv/Scripts/python.exe -m unittest discover -s tests
    ```
+
+## Admin Reports and Excel Export
+
+Admin users now have a **Reports** button in the main window's header. Technician
+users do not see this button and cannot open, generate, or export reports through
+the action handlers. Report queries and export authorization also recheck that
+the authenticated application user is still an Active Admin in `helpdesk.users`.
+Logout closes the Reports window and revokes its shared session permissions.
+
+Install the Excel dependency from the project directory in Git Bash:
+
+```bash
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+.venv/Scripts/python.exe gui_app.py
+```
+
+This adds [openpyxl](https://openpyxl.readthedocs.io/en/stable/tutorial.html) to
+the project dependencies. No database migration, schema change, or new MySQL
+setup command is required. Reports use read-only queries against `helpdesk`.
+
+The separate, resizable Reports window initially loads all tickets. Choose any
+combination of Status, Priority, Category, and Assigned Technician, then click
+**Generate Report**. Every filter defaults to **All**, and selected filters are
+combined with AND. Technician choices include inactive technicians for historical
+reporting and show IDs to distinguish duplicate names. Assignment filtering uses
+the existing assignment ID, rather than matching names. The main ticket table's
+search/status/view state remains independent and unchanged.
+
+The preview shows Ticket ID, Employee Name, Department, Category, Subject,
+Priority, Status, Assigned Technician, Created At, Updated At, and Resolved At,
+ordered by Ticket ID. Horizontal and vertical scrollbars keep the table usable.
+The applied-filter label and ticket count describe the last successful preview.
+If a database read fails, its previous complete preview remains available.
+Changing dropdowns alone does not change the preview; click Generate Report to
+apply them. Generating again reloads current database data for the selected filters.
+
+**Export to Excel** opens a Save As dialog with the default filename
+`helpdesk_ticket_report_YYYY-MM-DD.xlsx`. It exports all rows in the displayed
+preview and that preview's applied filters, without re-querying tickets or using
+unapplied dropdown changes. Cancelling Save As does nothing. Excel export works
+for an empty generated report too, producing metadata and headers with a zero count.
+
+The workbook includes a title, generated date/time in Asia/Manila (UTC+08:00), all
+four applied filters, ticket count, and the eleven preview columns. Headers are
+bold, column widths are set, timestamps use readable Excel date cells, and the
+header/metadata rows are frozen. Subjects wrap, and an Excel autofilter is added.
+Ticket text is stored as text, including values starting with `=`, rather than
+being interpreted as a spreadsheet formula. Only the listed ticket fields are
+exported; passwords, hashes, and authentication information are excluded.
+
+The destination is replaced only after a complete workbook has been saved to a
+temporary file in the same folder. Errors leave an existing destination unchanged
+and keep the preview open for retry. The success message includes the saved path.
+While an export is running, Close and Logout wait for its result; a pending
+read-only report load can be closed safely. Reports do not change tickets,
+technicians, history, or notes, and the CLI remains unchanged.
+
+### Manual verification
+
+1. Install dependencies and launch with the Git Bash commands above. Log in as
+   Admin and click Reports. Confirm that all filters are All, all tickets are
+   previewed, the eleven headings appear, the count is correct, and both
+   scrollbars work. Clicking Reports again should focus the existing window.
+2. Apply each filter by itself, then combine two or more filters and click
+   Generate Report. Verify each row matches every selected filter. Choose an
+   inactive technician with existing assignments; their tickets should appear.
+   Duplicate names must be distinguishable by technician ID. Set filters back
+   to All and generate again to restore the complete report.
+3. Use a filter combination with no matching tickets. Expect a friendly zero-count
+   message and an empty stable preview. Exporting it should produce a workbook
+   containing metadata and headers, with no ticket rows.
+4. Generate a nonempty filtered preview, click Export to Excel, and choose an
+   `.xlsx` filename/location. Check the success message's path. Open the file in
+   Excel and verify its title, generated time, applied filters, ticket count,
+   headers, every matching row, timestamp formatting, and frozen header rows.
+5. Change a dropdown without generating again, then export. Verify the file still
+   matches the displayed preview and its applied-filter label. Generate again
+   and export to confirm the new filter is applied.
+6. Cancel Save As. Expect no file, success message, or error. Try exporting to a
+   destination already open in Excel; if Excel locks it, expect friendly failure
+   feedback and an unchanged preview. Close the destination and retry.
+7. Close Reports, then logout and log in as Technician. Reports must be absent;
+   existing All Tickets/My Assigned Tickets, allowed updates, history, notes,
+   dashboard, search, and account controls must still work. Log back in as Admin
+   and verify Reports returns with a fresh preview and permissions.
+8. Verify the Admin's ticket/user/technician management and the existing CLI still
+   work. Run the complete test suite (mocked databases and temporary export files):
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests
+   ```
