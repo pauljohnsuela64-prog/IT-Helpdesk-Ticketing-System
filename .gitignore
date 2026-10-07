@@ -4,7 +4,11 @@ __pycache__/
 build/
 dist/
 *.spec
+!ITHelpDesk.spec
 # Local Python environment and private settings
 .venv/
 .env.*
 !.env.example
+# Generated ticket exports
+helpdesk_ticket_report_*.xlsx
+reports/*.xlsx

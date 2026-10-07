@@ -1,13 +1,21 @@
 from pathlib import Path
 import os
+import sys
 
 import mysql.connector
 from dotenv import load_dotenv
 
 
+def _environment_file():
+    """Keep private configuration outside a frozen bundle, beside its executable."""
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent / '.env'
+    return Path(__file__).resolve().with_name('.env')
+
+
 def get_connection():
     """Open the existing database; never create or change its schema."""
-    load_dotenv(Path(__file__).with_name('.env'), override=False, interpolate=False)
+    load_dotenv(_environment_file(), override=False, interpolate=False)
     database_name = os.environ.get('DB_NAME')
     if database_name != 'helpdesk':
         raise ValueError('DB_NAME must be exactly helpdesk. Connection refused.')

@@ -2,6 +2,11 @@
 
 A Python + MySQL based IT Help Desk Ticketing System.
 
+## Windows executable
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for building `ITHelpDesk.exe`, configuring its
+external `.env`, and deploying with a local or central MySQL database.
+
 ## Project Status
 
 🚧 In Development
