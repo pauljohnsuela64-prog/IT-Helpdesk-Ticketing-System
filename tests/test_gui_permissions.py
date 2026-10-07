@@ -22,10 +22,12 @@ def policy(role):
 
 def mock_viewer_widgets(stack):
     """Keep distinct button mocks so one disabled button cannot mask another."""
-    for name in ('Style', 'Frame', 'Entry', 'Treeview', 'Scrollbar'):
+    for name in ('Style', 'Frame', 'Entry', 'Treeview', 'Scrollbar', 'Separator'):
         stack.enter_context(patch.object(gui.ttk, name))
     labels = stack.enter_context(patch.object(gui.ttk, 'Label'))
     stack.enter_context(patch.object(gui.ttk, 'Button', side_effect=lambda *args, **kwargs: MagicMock()))
+    stack.enter_context(patch.object(gui.ttk, 'Menubutton', side_effect=lambda *args, **kwargs: MagicMock()))
+    stack.enter_context(patch.object(gui.tk, 'Menu', side_effect=lambda *args, **kwargs: MagicMock()))
     stack.enter_context(patch.object(gui.tk, 'StringVar'))
     stack.enter_context(patch.object(gui, 'DashboardPanel'))
     stack.enter_context(patch.object(gui.TicketViewer, 'refresh_tickets'))
@@ -69,14 +71,23 @@ class MainWindowPermissionTests(unittest.TestCase):
             with self.subTest(role=role), ExitStack() as stack:
                 labels = mock_viewer_widgets(stack)
                 viewer = gui.TicketViewer(MagicMock(), user=account(role), on_logout=MagicMock())
-                for button in (viewer.delete_button, viewer.technician_button):
+                for button in (viewer.delete_button,):
                     if role == 'Technician':
                         button.state.assert_called_once_with(['disabled'])
                     else:
                         button.state.assert_not_called()
                 for button in (viewer.create_button, viewer.update_button, viewer.history_button,
-                               viewer.notes_button, viewer.refresh_button, viewer.logout_button, viewer.password_button):
+                               viewer.notes_button, viewer.refresh_button, viewer.account_button):
                     button.state.assert_not_called()
+                if role == 'Admin':
+                    self.assertEqual([item.kwargs['label'] for item in viewer.administration_menu.add_command.call_args_list],
+                                     ['Manage Users', 'Manage Technicians', 'Reports'])
+                    viewer.administration_button.state.assert_not_called()
+                else:
+                    self.assertIsNone(viewer.administration_button)
+                    self.assertIsNone(viewer.administration_menu)
+                self.assertEqual([item.kwargs['label'] for item in viewer.account_menu.add_command.call_args_list],
+                                 ['Change Password', 'Logout'])
                 self.assertIn(f'Logged in as: Test Operator ({role})',
                               [call.kwargs.get('text') for call in labels.call_args_list])
 

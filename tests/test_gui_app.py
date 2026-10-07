@@ -208,6 +208,7 @@ class GuiConstructionTests(unittest.TestCase):
         with patch.object(gui, 'DashboardPanel'), patch.object(gui.ttk, 'Style'), patch.object(gui.ttk, 'Frame'), \
              patch.object(gui.ttk, 'Label'), patch.object(gui.ttk, 'Entry') as entry, \
              patch.object(gui.ttk, 'Button') as button, \
+             patch.object(gui.ttk, 'Separator'), \
              patch.object(gui.ttk, 'Treeview') as tree, \
              patch.object(gui.ttk, 'Scrollbar', side_effect=[vertical, horizontal]) as scrollbar, \
              patch.object(gui.tk, 'StringVar'), \
@@ -225,13 +226,12 @@ class GuiConstructionTests(unittest.TestCase):
         self.assertEqual(headings, ['Ticket ID', 'Employee', 'Department', 'Category',
                                     'Subject', 'Priority', 'Status', 'Assigned To', 'Created At'])
         buttons = {item.kwargs['text']: item.kwargs['command'] for item in button.call_args_list}
-        self.assertEqual(buttons, {'Manage Technicians': viewer.open_technician_management,
-                                   'Create Ticket': viewer.open_create_ticket,
-                                   'Update Ticket': viewer.open_update_ticket,
-                                   'Delete Ticket': viewer.open_delete_ticket,
-                                   'View History': viewer.open_ticket_history,
-                                   'Ticket Notes': viewer.open_ticket_notes, 'Refresh': refresh,
-                                   'Search': viewer.perform_search, 'Clear Search': viewer.clear_search})
+        self.assertEqual(buttons, {'Create': viewer.open_create_ticket,
+                                   'Update': viewer.open_update_ticket,
+                                   'Delete': viewer.open_delete_ticket,
+                                   'History': viewer.open_ticket_history,
+                                   'Notes': viewer.open_ticket_notes, 'Refresh': refresh,
+                                   'Search': viewer.perform_search, 'Clear': viewer.clear_search})
         entry.return_value.bind.assert_called_once_with('<Return>', viewer.perform_search)
         tree.assert_called_once()
         self.assertEqual([item.kwargs['orient'] for item in scrollbar.call_args_list],

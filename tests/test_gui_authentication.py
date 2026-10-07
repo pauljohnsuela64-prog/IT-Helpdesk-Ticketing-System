@@ -191,10 +191,12 @@ class ViewerSessionTests(unittest.TestCase):
     def test_logged_in_information_logout_and_existing_controls_available_to_both_roles(self):
         for role in ('Admin', 'Technician'):
             with ExitStack() as stack:
-                for name in ('Style', 'Frame', 'Entry', 'Treeview', 'Scrollbar'):
+                for name in ('Style', 'Frame', 'Entry', 'Treeview', 'Scrollbar', 'Separator'):
                     stack.enter_context(patch.object(gui.ttk, name))
                 labels = stack.enter_context(patch.object(gui.ttk, 'Label'))
                 buttons = stack.enter_context(patch.object(gui.ttk, 'Button'))
+                stack.enter_context(patch.object(gui.ttk, 'Menubutton', side_effect=lambda *args, **kwargs: MagicMock()))
+                stack.enter_context(patch.object(gui.tk, 'Menu', side_effect=lambda *args, **kwargs: MagicMock()))
                 stack.enter_context(patch.object(gui.tk, 'StringVar'))
                 stack.enter_context(patch.object(gui, 'DashboardPanel'))
                 stack.enter_context(patch.object(gui.TicketViewer, 'refresh_tickets'))
@@ -202,8 +204,11 @@ class ViewerSessionTests(unittest.TestCase):
             texts = [item.kwargs.get('text') for item in labels.call_args_list]
             self.assertIn(f'Logged in as: Test Operator ({role})', texts)
             self.assertTrue('password_hash' not in viewer.user)
-            self.assertTrue({'Logout', 'Change Password', 'Create Ticket', 'Update Ticket', 'Delete Ticket', 'Manage Technicians',
-                             'Ticket Notes', 'View History'}.issubset({item.kwargs['text'] for item in buttons.call_args_list}))
+            self.assertTrue({'Create', 'Update', 'Delete', 'Notes', 'History', 'Refresh'}.issubset(
+                {item.kwargs['text'] for item in buttons.call_args_list}))
+            self.assertEqual({item.kwargs['label'] for item in viewer.account_menu.add_command.call_args_list},
+                             {'Change Password', 'Logout'})
+            self.assertEqual(viewer.administration_menu is not None, role == 'Admin')
 
     def test_logout_closes_all_children_and_cancels_table_and_dashboard_reads_without_exiting(self):
         viewer = self.viewer()

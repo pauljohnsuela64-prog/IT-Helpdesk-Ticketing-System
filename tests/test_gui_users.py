@@ -66,15 +66,15 @@ class MainUserManagementTests(unittest.TestCase):
         for role in ('Admin', 'Technician'):
             with self.subTest(role=role), ExitStack() as stack:
                 mock_viewer_widgets(stack)
-                buttons = stack.enter_context(patch.object(app.ttk, 'Button', side_effect=lambda *args, **kwargs: MagicMock()))
                 viewer = app.TicketViewer(MagicMock(), user=user(role=role), on_logout=MagicMock())
-            labels = {call.kwargs['text'] for call in buttons.call_args_list}
+            labels = ({call.kwargs['label'] for call in viewer.administration_menu.add_command.call_args_list}
+                      if viewer.administration_menu is not None else set())
             self.assertEqual('Manage Users' in labels, role == 'Admin')
             if role == 'Admin':
-                self.assertIsNotNone(viewer.user_button)
-                viewer.user_button.state.assert_not_called()
+                self.assertIsNotNone(viewer.administration_button)
+                viewer.administration_button.state.assert_not_called()
             else:
-                self.assertIsNone(viewer.user_button)
+                self.assertIsNone(viewer.administration_button)
 
     def test_direct_handler_denies_technician_and_revoked_admin(self):
         for revoked in (False, True):
@@ -146,7 +146,7 @@ class MainUserManagementTests(unittest.TestCase):
             for role in ('Admin', 'Technician', 'Admin'):
                 application._open_helpdesk(user(role=role))
                 viewer = application._viewer
-                self.assertEqual(viewer.user_button is not None, role == 'Admin')
+                self.assertEqual(viewer.administration_menu is not None, role == 'Admin')
                 self.assertEqual(viewer.permissions.allows('manage_users'), role == 'Admin')
                 viewer.logout()
                 self.assertFalse(viewer.permissions.allows('manage_users'))

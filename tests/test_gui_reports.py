@@ -55,10 +55,11 @@ class ReportsMainWindowTests(unittest.TestCase):
         for role in ('Admin', 'Technician', 'Admin'):
             with self.subTest(role=role), ExitStack() as stack:
                 mock_viewer_widgets(stack)
-                buttons = stack.enter_context(patch.object(app.ttk, 'Button', side_effect=lambda *args, **kwargs: MagicMock()))
                 viewer = app.TicketViewer(MagicMock(), user=account(role), on_logout=MagicMock())
-            self.assertEqual('Reports' in {call.kwargs['text'] for call in buttons.call_args_list}, role == 'Admin')
-            self.assertEqual(viewer.reports_button is not None, role == 'Admin')
+            labels = ({call.kwargs['label'] for call in viewer.administration_menu.add_command.call_args_list}
+                      if viewer.administration_menu is not None else set())
+            self.assertEqual('Reports' in labels, role == 'Admin')
+            self.assertEqual(viewer.administration_button is not None, role == 'Admin')
             self.assertEqual(viewer.permissions.allows('export_reports'), role == 'Admin')
 
     def test_handler_denies_technician_and_revoked_admin_before_opening_window(self):

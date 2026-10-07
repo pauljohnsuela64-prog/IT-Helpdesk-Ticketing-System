@@ -59,7 +59,9 @@ class PasswordControlsTests(unittest.TestCase):
             with ExitStack() as stack:
                 mock_viewer_widgets(stack)
                 viewer = app_gui.TicketViewer(MagicMock(), account(role), MagicMock())
-                viewer.password_button.state.assert_not_called()
+                viewer.account_button.state.assert_not_called()
+                self.assertIn('Change Password',
+                              {item.kwargs['label'] for item in viewer.account_menu.add_command.call_args_list})
                 dialog = stack.enter_context(patch.object(app_gui, 'ChangePasswordDialog'))
                 # The selected ticket ID must never decide whose password changes.
                 viewer.tree.selection.return_value = ('999',)

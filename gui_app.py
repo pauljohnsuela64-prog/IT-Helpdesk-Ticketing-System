@@ -110,7 +110,7 @@ class TicketViewer:
             style.theme_use('clam')
         style.configure('Helpdesk.TFrame', background=BACKGROUND)
         style.configure('Helpdesk.Title.TLabel', background=BACKGROUND,
-                        foreground='#182a43', font=('Segoe UI', 21, 'bold'))
+                        foreground='#182a43', font=('Segoe UI', 18, 'bold'))
         style.configure('Helpdesk.Subtitle.TLabel', background=BACKGROUND,
                         foreground='#607086', font=('Segoe UI', 11))
         style.configure('Helpdesk.Section.TLabel', background=BACKGROUND,
@@ -118,6 +118,8 @@ class TicketViewer:
         style.configure('Helpdesk.Status.TLabel', background=BACKGROUND,
                         foreground='#526176', font=('Segoe UI', 10))
         style.configure('Helpdesk.TButton', padding=(16, 8), font=('Segoe UI', 10))
+        style.configure('Helpdesk.Toolbar.TButton', padding=(10, 7), font=('Segoe UI', 10))
+        style.configure('Helpdesk.TMenubutton', padding=(12, 7), font=('Segoe UI', 10))
         style.configure('Helpdesk.Treeview', rowheight=30, font=('Segoe UI', 10),
                         background='white', fieldbackground='white')
         style.configure('Helpdesk.Treeview.Heading', font=('Segoe UI', 10, 'bold'))
@@ -128,81 +130,105 @@ class TicketViewer:
                         foreground='#182a43', font=('Segoe UI', 22, 'bold'))
 
     def _build_widgets(self):
-        content = ttk.Frame(self.root, padding=(24, 20, 24, 16), style='Helpdesk.TFrame')
+        content = ttk.Frame(self.root, padding=(24, 18, 24, 14), style='Helpdesk.TFrame')
         self.content = content
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(4, weight=1)
 
         header = ttk.Frame(content, style='Helpdesk.TFrame')
-        header.grid(row=0, column=0, sticky='ew', pady=(0, 22))
-        ttk.Label(header, text='IT HELP DESK TICKETING SYSTEM',
-                  style='Helpdesk.Title.TLabel').grid(row=0, column=0, sticky='w')
+        header.grid(row=0, column=0, sticky='ew', pady=(0, 16))
+        title = ttk.Label(header, text='IT HELP DESK TICKETING SYSTEM',
+                          wraplength=540, style='Helpdesk.Title.TLabel')
+        title.grid(row=0, column=0, sticky='w')
         ttk.Label(header, text='Ticket Management',
-                  style='Helpdesk.Subtitle.TLabel').grid(row=1, column=0, sticky='w', pady=(6, 0))
+                  style='Helpdesk.Subtitle.TLabel').grid(row=1, column=0, sticky='w', pady=(4, 0))
         header.columnconfigure(0, weight=1)
-        self.user_button = None
-        self.reports_button = None
-        if self.permissions.allows('reports'):
-            self.reports_button = ttk.Button(header, text='Reports', command=self.open_reports,
-                                             style='Helpdesk.TButton')
-            self.reports_button.grid(row=0, column=2, sticky='e', padx=(10, 0), pady=(0, 6))
-        if self.permissions.allows('manage_users'):
-            self.user_button = ttk.Button(header, text='Manage Users', command=self.open_user_management,
-                                          style='Helpdesk.TButton')
-            self.user_button.grid(row=0, column=1, sticky='e', padx=(16, 0), pady=(0, 6))
-        self.technician_button = ttk.Button(header, text='Manage Technicians',
-                                            command=self.open_technician_management, style='Helpdesk.TButton')
-        self.technician_button.grid(row=1, column=1, sticky='e', padx=(16, 0))
-        if not self.permissions.allows('manage_technicians'):
-            self.technician_button.state(['disabled'])
+        self.administration_button = None
+        self.administration_menu = None
+        self.account_button = None
+        self.account_menu = None
+        session = None
         if self.user is not None:
             name = ''.join(character if character.isprintable() else ' ' for character in self.user['full_name'])
-            ttk.Label(header, text=f'Logged in as: {name} ({self.user["role"]})', wraplength=730,
-                      style='Helpdesk.Status.TLabel').grid(row=2, column=0, sticky='w', pady=(10, 0))
-            account_controls = ttk.Frame(header, style='Helpdesk.TFrame')
-            account_controls.grid(row=2, column=1, sticky='e', padx=(16, 0), pady=(10, 0))
+            session = ttk.Frame(header, style='Helpdesk.TFrame')
+            session.grid(row=0, column=1, rowspan=2, sticky='ne', padx=(20, 0))
+            session.columnconfigure(0, weight=1)
+            ttk.Label(session, text=f'Logged in as: {name} ({self.user["role"]})', wraplength=280,
+                      justify='right', anchor='e', style='Helpdesk.Status.TLabel').grid(
+                          row=0, column=0, sticky='e', pady=(0, 8))
+            account_controls = ttk.Frame(session, style='Helpdesk.TFrame')
+            account_controls.grid(row=1, column=0, sticky='e')
+            administration_options = (
+                ('Manage Users', 'manage_users', self.open_user_management),
+                ('Manage Technicians', 'manage_technicians', self.open_technician_management),
+                ('Reports', 'reports', self.open_reports),
+            )
+            allowed_options = [option for option in administration_options if self.permissions.allows(option[1])]
+            if allowed_options:
+                self.administration_button = ttk.Menubutton(account_controls, text='Administration', width=16,
+                                                            style='Helpdesk.TMenubutton')
+                self.administration_button.grid(row=0, column=0, padx=(0, 8))
+                self.administration_menu = tk.Menu(self.administration_button, tearoff=False)
+                for label, _, command in allowed_options:
+                    self.administration_menu.add_command(label=label, command=command)
+                self.administration_button.configure(menu=self.administration_menu)
+            self.account_button = ttk.Menubutton(account_controls, text='Account', width=10,
+                                                 style='Helpdesk.TMenubutton')
+            self.account_button.grid(row=0, column=1)
+            self.account_menu = tk.Menu(self.account_button, tearoff=False)
             if self.permissions.allows('change_password'):
-                self.password_button = ttk.Button(account_controls, text='Change Password', command=self.open_change_password,
-                                                   style='Helpdesk.TButton')
-                self.password_button.grid(row=0, column=0, padx=(0, 10))
-            self.logout_button = ttk.Button(account_controls, text='Logout', command=self.logout, style='Helpdesk.TButton')
-            self.logout_button.grid(row=0, column=1)
+                self.account_menu.add_command(label='Change Password', command=self.open_change_password)
+                self.account_menu.add_separator()
+            self.account_menu.add_command(label='Logout', command=self.logout)
+            self.account_button.configure(menu=self.account_menu)
+
+        def resize_title(event):
+            available = max(1, event.width - (session.winfo_reqwidth() + 20 if session is not None else 0))
+            if int(title.cget('wraplength')) != available:
+                title.configure(wraplength=available)
+
+        header.bind('<Configure>', resize_title)
 
         self.dashboard = DashboardPanel(content, self.filter_by_status)
-        self.dashboard.frame.grid(row=1, column=0, sticky='ew', pady=(0, 18))
+        self.dashboard.frame.grid(row=1, column=0, sticky='ew', pady=(0, 14))
 
         toolbar = ttk.Frame(content, style='Helpdesk.TFrame')
-        toolbar.grid(row=2, column=0, sticky='ew', pady=(0, 12))
-        toolbar.columnconfigure(0, weight=1)
+        toolbar.grid(row=2, column=0, sticky='ew', pady=(0, 10))
+        toolbar.columnconfigure(4, weight=1)
         ttk.Label(toolbar, text='Tickets', style='Helpdesk.Section.TLabel').grid(
-            row=0, column=0, sticky='w',
+            row=0, column=0, sticky='w', padx=(0, 16),
         )
-        self.create_button = ttk.Button(toolbar, text='Create Ticket', command=self.open_create_ticket,
-                                        style='Helpdesk.TButton')
-        self.create_button.grid(row=0, column=1, sticky='e', padx=(0, 10))
-        self.update_button = ttk.Button(toolbar, text='Update Ticket', command=self.open_update_ticket,
-                                        style='Helpdesk.TButton')
-        self.update_button.grid(row=0, column=2, sticky='e', padx=(0, 10))
-        self.delete_button = ttk.Button(toolbar, text='Delete Ticket', command=self.open_delete_ticket,
-                                        style='Helpdesk.TButton')
-        self.delete_button.grid(row=0, column=3, sticky='e', padx=(0, 10))
+        ticket_actions = ttk.Frame(toolbar, style='Helpdesk.TFrame')
+        ticket_actions.grid(row=0, column=1, sticky='w')
+        self.create_button = ttk.Button(ticket_actions, text='Create', command=self.open_create_ticket,
+                                        width=8, style='Helpdesk.Toolbar.TButton')
+        self.create_button.grid(row=0, column=0, padx=(0, 6))
+        self.update_button = ttk.Button(ticket_actions, text='Update', command=self.open_update_ticket,
+                                        width=8, style='Helpdesk.Toolbar.TButton')
+        self.update_button.grid(row=0, column=1, padx=(0, 6))
+        self.delete_button = ttk.Button(ticket_actions, text='Delete', command=self.open_delete_ticket,
+                                        width=8, style='Helpdesk.Toolbar.TButton')
+        self.delete_button.grid(row=0, column=2)
         if not self.permissions.allows('delete_ticket'):
             self.delete_button.state(['disabled'])
-        self.history_button = ttk.Button(toolbar, text='View History', command=self.open_ticket_history,
-                                         style='Helpdesk.TButton')
-        self.history_button.grid(row=0, column=4, sticky='e', padx=(0, 10))
-        self.notes_button = ttk.Button(toolbar, text='Ticket Notes', command=self.open_ticket_notes,
-                                       style='Helpdesk.TButton')
-        self.notes_button.grid(row=0, column=5, sticky='e', padx=(0, 10))
-        self.refresh_button = ttk.Button(toolbar, text='Refresh', command=self.refresh_tickets,
-                                         style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=6, sticky='e')
+        ttk.Separator(toolbar, orient='vertical').grid(row=0, column=2, sticky='ns', padx=16)
+        ticket_tools = ttk.Frame(toolbar, style='Helpdesk.TFrame')
+        ticket_tools.grid(row=0, column=3, sticky='w')
+        self.history_button = ttk.Button(ticket_tools, text='History', command=self.open_ticket_history,
+                                         width=8, style='Helpdesk.Toolbar.TButton')
+        self.history_button.grid(row=0, column=0, padx=(0, 6))
+        self.notes_button = ttk.Button(ticket_tools, text='Notes', command=self.open_ticket_notes,
+                                       width=8, style='Helpdesk.Toolbar.TButton')
+        self.notes_button.grid(row=0, column=1, padx=(0, 6))
+        self.refresh_button = ttk.Button(ticket_tools, text='Refresh', command=self.refresh_tickets,
+                                         width=8, style='Helpdesk.Toolbar.TButton')
+        self.refresh_button.grid(row=0, column=2)
 
         search_area = ttk.Frame(content, style='Helpdesk.TFrame')
-        search_area.grid(row=3, column=0, sticky='ew', pady=(0, 12))
+        search_area.grid(row=3, column=0, sticky='ew', pady=(0, 8))
         search_area.columnconfigure(1, weight=1)
-        ttk.Label(search_area, text='Search tickets', style='Helpdesk.Status.TLabel').grid(
+        ttk.Label(search_area, text='Search tickets:', style='Helpdesk.Status.TLabel').grid(
             row=0, column=0, sticky='w', padx=(0, 12),
         )
         self.search_term = tk.StringVar(master=self.root, value='')
@@ -210,20 +236,20 @@ class TicketViewer:
         self.search_entry.grid(row=0, column=1, sticky='ew', padx=(0, 10))
         self.search_entry.bind('<Return>', self.perform_search)
         self.search_button = ttk.Button(search_area, text='Search', command=self.perform_search,
-                                        style='Helpdesk.TButton')
+                                        width=8, style='Helpdesk.Toolbar.TButton')
         self.search_button.grid(row=0, column=2, padx=(0, 8))
-        self.clear_search_button = ttk.Button(search_area, text='Clear Search', command=self.clear_search,
-                                              style='Helpdesk.TButton')
+        self.clear_search_button = ttk.Button(search_area, text='Clear', command=self.clear_search,
+                                              width=8, style='Helpdesk.Toolbar.TButton')
         self.clear_search_button.grid(row=0, column=3)
 
         if self.user is not None and self.user['role'] == 'Technician' and self.permissions.allows('view_tickets'):
-            views = ttk.Frame(search_area, style='Helpdesk.TFrame')
-            views.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(10, 0))
+            views = ttk.Frame(toolbar, style='Helpdesk.TFrame')
+            views.grid(row=1, column=0, columnspan=5, sticky='ew', pady=(8, 0))
             self.all_tickets_button = ttk.Button(views, text='All Tickets', command=self.show_all_tickets,
-                                                 style='Helpdesk.TButton')
+                                                 style='Helpdesk.Toolbar.TButton')
             self.all_tickets_button.grid(row=0, column=0, padx=(0, 10))
             self.assigned_tickets_button = ttk.Button(views, text='My Assigned Tickets', command=self.show_assigned_tickets,
-                                                      style='Helpdesk.TButton')
+                                                      style='Helpdesk.Toolbar.TButton')
             self.assigned_tickets_button.grid(row=0, column=1, padx=(0, 16))
             self.view_status = tk.StringVar(master=self.root, value='View: All Tickets')
             ttk.Label(views, textvariable=self.view_status, style='Helpdesk.Status.TLabel').grid(row=0, column=2, sticky='w')
@@ -248,7 +274,7 @@ class TicketViewer:
 
         self.status = tk.StringVar(master=self.root, value='Ready.')
         ttk.Label(content, textvariable=self.status, style='Helpdesk.Status.TLabel',
-                  wraplength=820, anchor='w').grid(row=5, column=0, sticky='ew', pady=(12, 0))
+                  wraplength=820, anchor='w').grid(row=5, column=0, sticky='ew', pady=(8, 0))
 
     def filter_by_status(self, status):
         if self._closed or (status and status not in STATUSES):

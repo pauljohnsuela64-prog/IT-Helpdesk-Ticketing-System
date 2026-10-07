@@ -47,7 +47,7 @@ class DashboardPanel:
             card = ttk.Frame(cards, padding=(14, 8), relief='solid', borderwidth=1,
                              style='Dashboard.Card.TFrame')
             card.grid(row=index // 4, column=index % 4, sticky='nsew',
-                      padx=(0, 8) if index % 4 < 3 else 0, pady=(0, 8))
+                      padx=4, pady=(0, 8))
             card.columnconfigure(0, weight=1)
             title_label = ttk.Label(card, text=title, style='Dashboard.Title.TLabel')
             title_label.grid(row=0, column=0, sticky='w')
