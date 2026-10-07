@@ -5,6 +5,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import ALTERNATE_ROW, BODY_FONT, BOLD_FONT, BUTTON_GAP, DANGER_COLOR, TEXT_OPTIONS, WINDOW_PADDING
+
 from input_validation import validate_comment_text
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import TechnicianReadError, get_active_technicians
@@ -89,7 +91,7 @@ class TicketNotesWindow:
         return self.has_open_dialog and self._child_dialog.is_saving
 
     def _build_widgets(self):
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=3)
@@ -106,11 +108,11 @@ class TicketNotesWindow:
         controls.grid(row=1, column=0, sticky='ew', pady=(12, 0))
         controls.columnconfigure(2, weight=1)
         self.add_button = ttk.Button(controls, text='Add Note', command=self.open_add, style='Helpdesk.TButton')
-        self.add_button.grid(row=0, column=0, padx=(0, 10))
-        self.delete_button = ttk.Button(controls, text='Delete Note', command=self.open_delete, style='Helpdesk.TButton')
-        self.delete_button.grid(row=0, column=1, padx=(0, 10))
+        self.add_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
+        self.delete_button = ttk.Button(controls, text='Delete Note', command=self.open_delete, style='Danger.Helpdesk.TButton')
+        self.delete_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.refresh_button = ttk.Button(controls, text='Refresh', command=self.refresh, style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=3, padx=(0, 10))
+        self.refresh_button.grid(row=0, column=3, padx=(0, BUTTON_GAP))
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
         self.close_button.grid(row=0, column=4)
         self._enable_actions(False)
@@ -123,7 +125,7 @@ class TicketNotesWindow:
         for field, heading, width, minimum in NOTE_COLUMNS:
             self.tree.heading(field, text=heading)
             self.tree.column(field, width=width, minwidth=minimum, stretch=field == 'comment_text', anchor='w')
-        self.tree.tag_configure('alternate', background='#f0f4fa')
+        self.tree.tag_configure('alternate', background=ALTERNATE_ROW)
         self.tree.grid(row=0, column=0, sticky='nsew')
         self.tree.bind('<<TreeviewSelect>>', self._show_selected_note)
         vertical = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
@@ -138,7 +140,7 @@ class TicketNotesWindow:
         ttk.Label(area, text='Selected Note', style='Helpdesk.Status.TLabel').grid(
             row=0, column=0, sticky='w', pady=(0, 6),
         )
-        self.details = tk.Text(area, height=6, width=60, wrap='word', font=('Segoe UI', 10), padx=8, pady=8)
+        self.details = tk.Text(area, height=6, width=60, wrap='word', padx=8, pady=8, **TEXT_OPTIONS)
         self.details.grid(row=1, column=0, sticky='nsew')
         scrollbar = ttk.Scrollbar(area, orient='vertical', command=self.details.yview)
         scrollbar.grid(row=1, column=1, sticky='ns')
@@ -345,7 +347,7 @@ class _NoteDialog:
         self.window.rowconfigure(0, weight=1)
         self.window.protocol('WM_DELETE_WINDOW', self.cancel)
         self.window.bind('<Escape>', lambda event: self.cancel())
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
@@ -385,7 +387,7 @@ class _NoteDialog:
         area.grid(row=row, column=0, sticky='nsew')
         area.columnconfigure(0, weight=1)
         area.rowconfigure(0, weight=1)
-        self.text = tk.Text(area, height=9, width=50, wrap='word', font=('Segoe UI', 10), padx=8, pady=8)
+        self.text = tk.Text(area, height=9, width=50, wrap='word', padx=8, pady=8, **TEXT_OPTIONS)
         self.text.grid(row=0, column=0, sticky='nsew')
         scrollbar = ttk.Scrollbar(area, orient='vertical', command=self.text.yview)
         scrollbar.grid(row=0, column=1, sticky='ns')
@@ -477,7 +479,7 @@ class AddNoteDialog(_NoteDialog):
             ttk.Label(self.form, textvariable=self.author_name, style='Helpdesk.Status.TLabel').grid(
                 row=1, column=0, sticky='ew', pady=(0, 12))
         else:
-            self.author = ttk.Combobox(self.form, values=(), state='disabled', font=('Segoe UI', 10))
+            self.author = ttk.Combobox(self.form, values=(), state='disabled', font=BODY_FONT)
             self.author.grid(row=1, column=0, sticky='ew', pady=(0, 12))
             self._widgets.append((self.author, 'readonly'))
         ttk.Label(self.form, text='Note', style='Helpdesk.Status.TLabel').grid(row=2, column=0, sticky='w', pady=(0, 6))
@@ -593,10 +595,11 @@ class AddNoteDialog(_NoteDialog):
 class DeleteNoteDialog(_NoteDialog):
     def __init__(self, owner, comment_id):
         super().__init__(owner, 'Confirm Note Deletion', 'Permanently Delete')
+        self.save_button.configure(style='Danger.Helpdesk.TButton')
         self.comment_id = comment_id
         self._note = None
         ttk.Label(self.form, text='This note deletion is permanent and cannot be undone.',
-                  foreground='#9c2b2b', font=('Segoe UI', 11, 'bold'), wraplength=540,
+                  foreground=DANGER_COLOR, font=BOLD_FONT, wraplength=540,
                   style='Helpdesk.Status.TLabel').grid(row=0, column=0, sticky='ew', pady=(0, 12))
         self._build_text(1, readonly=True)
         Thread(target=self._load_data, daemon=True).start()

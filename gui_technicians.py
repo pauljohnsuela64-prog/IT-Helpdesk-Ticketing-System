@@ -5,6 +5,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import ALTERNATE_ROW, BODY_FONT, BUTTON_GAP, WINDOW_PADDING
+
 from input_validation import validate_text
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import (
@@ -70,7 +72,7 @@ class TechnicianManagementWindow:
                 and self._child_dialog.is_saving)
 
     def _build_widgets(self):
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
@@ -82,12 +84,12 @@ class TechnicianManagementWindow:
         controls.columnconfigure(2, weight=1)
         self.add_button = ttk.Button(controls, text='Add Technician', command=self.open_add,
                                      style='Helpdesk.TButton')
-        self.add_button.grid(row=0, column=0, padx=(0, 10))
+        self.add_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
         self.change_button = ttk.Button(controls, text='Change Technician Status', command=self.open_status,
                                         style='Helpdesk.TButton')
-        self.change_button.grid(row=0, column=1, padx=(0, 10))
+        self.change_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.refresh_button = ttk.Button(controls, text='Refresh', command=self.refresh, style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=3, padx=(0, 10))
+        self.refresh_button.grid(row=0, column=3, padx=(0, BUTTON_GAP))
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
         self.close_button.grid(row=0, column=4)
         if not self.permissions.allows('manage_technicians'):
@@ -102,7 +104,7 @@ class TechnicianManagementWindow:
         for field, heading, width, minimum in TECHNICIAN_COLUMNS:
             self.tree.heading(field, text=heading)
             self.tree.column(field, width=width, minwidth=minimum, stretch=field in ('full_name', 'email'), anchor='w')
-        self.tree.tag_configure('alternate', background='#f0f4fa')
+        self.tree.tag_configure('alternate', background=ALTERNATE_ROW)
         self.tree.grid(row=0, column=0, sticky='nsew')
         vertical = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
         horizontal = ttk.Scrollbar(table, orient='horizontal', command=self.tree.xview)
@@ -263,7 +265,7 @@ class _TechnicianDialog:
         self.window.rowconfigure(0, weight=1)
         self.window.protocol('WM_DELETE_WINDOW', self.cancel)
         self.window.bind('<Escape>', lambda event: self.cancel())
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(1, weight=1)
@@ -360,7 +362,7 @@ class AddTechnicianDialog(_TechnicianDialog):
                 row=row, column=0, sticky='w', padx=(0, 16), pady=(0, 12),
             )
             self.fields[field] = tk.StringVar(master=self.window, value='')
-            entry = ttk.Entry(self.form, textvariable=self.fields[field], font=('Segoe UI', 10))
+            entry = ttk.Entry(self.form, textvariable=self.fields[field], font=BODY_FONT)
             entry.grid(row=row, column=1, sticky='ew', pady=(0, 12))
             self._widgets.append((entry, 'normal'))
         self._widgets[0][0].focus_set()
@@ -412,7 +414,7 @@ class ChangeTechnicianStatusDialog(_TechnicianDialog):
         )
         self.status = tk.StringVar(master=self.window, value='')
         self.status_combo = ttk.Combobox(self.form, textvariable=self.status, values=TECHNICIAN_STATUSES,
-                                         state='disabled', font=('Segoe UI', 10))
+                                         state='disabled', font=BODY_FONT)
         self.status_combo.grid(row=1, column=1, sticky='ew')
         self._widgets.append((self.status_combo, 'readonly'))
         self.save_button.state(['disabled'])

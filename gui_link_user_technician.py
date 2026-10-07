@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import BODY_FONT, BUTTON_GAP, WINDOW_PADDING
+
 from gui_permissions import PERMISSION_DENIED, require_permission
 from user_repository import (
     NO_AVAILABLE_TECHNICIANS, UserManagementPermissionError, UserReadError,
@@ -32,7 +34,7 @@ class LinkUserTechnicianDialog:
         self.window.rowconfigure(0, weight=1)
         self.window.protocol('WM_DELETE_WINDOW', self.cancel)
         self.window.bind('<Escape>', lambda event: self.cancel())
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(4, weight=1)
@@ -42,7 +44,7 @@ class LinkUserTechnicianDialog:
         ttk.Label(content, textvariable=self.summary, style='Helpdesk.Status.TLabel', wraplength=570).grid(
             row=1, column=0, sticky='ew', pady=(0, 16))
         ttk.Label(content, text='Active Technician', style='Helpdesk.Status.TLabel').grid(row=2, column=0, sticky='w')
-        self.technician_combo = ttk.Combobox(content, state='disabled', values=(), font=('Segoe UI', 11))
+        self.technician_combo = ttk.Combobox(content, state='disabled', values=(), font=BODY_FONT)
         self.technician_combo.grid(row=3, column=0, sticky='ew', pady=(6, 12))
         self.feedback = tk.StringVar(master=self.window, value='Loading account and available technicians...')
         ttk.Label(content, textvariable=self.feedback, style='Helpdesk.Status.TLabel', wraplength=570).grid(
@@ -51,7 +53,7 @@ class LinkUserTechnicianDialog:
         buttons.grid(row=5, column=0, sticky='ew')
         buttons.columnconfigure(0, weight=1)
         self.cancel_button = ttk.Button(buttons, text='Cancel', command=self.cancel, style='Helpdesk.TButton')
-        self.cancel_button.grid(row=0, column=1, padx=(0, 10))
+        self.cancel_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.save_button = ttk.Button(buttons, text='Save Link', command=self.save, style='Helpdesk.TButton')
         self.save_button.grid(row=0, column=2)
         self.save_button.state(['disabled'])

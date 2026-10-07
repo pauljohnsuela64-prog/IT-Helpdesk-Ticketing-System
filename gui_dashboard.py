@@ -44,7 +44,7 @@ class DashboardPanel:
         for column in range(4):
             cards.columnconfigure(column, weight=1, uniform='dashboard')
         for index, (field, title, status) in enumerate(DASHBOARD_CARDS):
-            card = ttk.Frame(cards, padding=(14, 8), relief='solid', borderwidth=1,
+            card = ttk.Frame(cards, padding=(16, 10), relief='solid', borderwidth=1,
                              style='Dashboard.Card.TFrame')
             card.grid(row=index // 4, column=index % 4, sticky='nsew',
                       padx=4, pady=(0, 8))
@@ -53,7 +53,7 @@ class DashboardPanel:
             title_label.grid(row=0, column=0, sticky='w')
             self.counts[field] = tk.StringVar(master=self.frame, value='—')
             count_label = ttk.Label(card, textvariable=self.counts[field], style='Dashboard.Count.TLabel')
-            count_label.grid(row=1, column=0, sticky='w', pady=(2, 0))
+            count_label.grid(row=1, column=0, sticky='w', pady=(4, 0))
             if status is not None:
                 card.configure(takefocus=True)
                 for widget in (card, title_label, count_label):

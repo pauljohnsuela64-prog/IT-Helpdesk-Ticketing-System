@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import BODY_FONT, TEXT_OPTIONS, WINDOW_PADDING
+
 from input_validation import validate_text
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from technician_repository import TechnicianReadError, get_active_technicians
@@ -45,7 +47,7 @@ class UpdateTicketDialog:
         self.feedback = tk.StringVar(master=self.window, value='Loading ticket and active technicians...')
         self.summary = tk.StringVar(master=self.window, value=f'Ticket ID: {ticket_id}')
         self.fields = {}
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
@@ -142,7 +144,8 @@ class UpdateTicketDialog:
         choices = {'category': CATEGORIES, 'priority': PRIORITIES, 'status': STATUSES}
         for row, (field, label) in enumerate(labels):
             ttk.Label(self.form, text=label, style='Helpdesk.Status.TLabel').grid(
-                row=row, column=0, sticky='nw', padx=(0, 16), pady=(0, 12),
+                row=row, column=0, sticky='nw' if field == 'description' else 'w',
+                padx=(0, 16), pady=(0, 12),
             )
             if field == 'description':
                 frame = ttk.Frame(self.form)
@@ -150,7 +153,7 @@ class UpdateTicketDialog:
                 frame.columnconfigure(0, weight=1)
                 frame.rowconfigure(0, weight=1)
                 self.description = tk.Text(frame, height=7, width=40, wrap='word',
-                                           font=('Segoe UI', 10), padx=8, pady=8)
+                                           padx=8, pady=8, **TEXT_OPTIONS)
                 self.description.insert('1.0', self._ticket[field])
                 self.description.grid(row=0, column=0, sticky='nsew')
                 scrollbar = ttk.Scrollbar(frame, orient='vertical', command=self.description.yview)
@@ -160,7 +163,7 @@ class UpdateTicketDialog:
                 continue
             self.fields[field] = tk.StringVar(master=self.window, value=self._ticket[field] or '')
             if field == 'assigned_to' and self.user['role'] == 'Technician':
-                widget = ttk.Entry(self.form, textvariable=self.fields[field], state='readonly', font=('Segoe UI', 10))
+                widget = ttk.Entry(self.form, textvariable=self.fields[field], state='readonly', font=BODY_FONT)
                 self.assignee = widget
                 normal_state = 'readonly'
             elif field == 'assigned_to':
@@ -170,16 +173,16 @@ class UpdateTicketDialog:
                     for technician in self._technicians
                 )
                 widget = ttk.Combobox(self.form, textvariable=self.fields[field], values=names,
-                                      state='readonly', font=('Segoe UI', 10))
+                                      state='readonly', font=BODY_FONT)
                 widget.current(0)
                 self.assignee = widget
                 normal_state = 'readonly'
             elif field in choices:
                 widget = ttk.Combobox(self.form, textvariable=self.fields[field], values=choices[field],
-                                      state='readonly', font=('Segoe UI', 10))
+                                      state='readonly', font=BODY_FONT)
                 normal_state = 'readonly'
             else:
-                widget = ttk.Entry(self.form, textvariable=self.fields[field], font=('Segoe UI', 10))
+                widget = ttk.Entry(self.form, textvariable=self.fields[field], font=BODY_FONT)
                 normal_state = 'normal'
             widget.grid(row=row, column=1, sticky='ew', pady=(0, 12))
             self._widgets.append((widget, normal_state))

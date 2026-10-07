@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import BOLD_FONT, DANGER_COLOR, WINDOW_PADDING
+
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from ticket_repository import TicketDeleteError, TicketReadError, delete_ticket, get_ticket
 
@@ -50,7 +52,7 @@ class DeleteTicketDialog:
         self.summary = tk.StringVar(master=self.window, value=f'Ticket ID: {ticket_id}')
         self.feedback = tk.StringVar(master=self.window, value='Loading current ticket information...')
 
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(1, weight=1)
@@ -61,8 +63,8 @@ class DeleteTicketDialog:
                   style='Helpdesk.Status.TLabel').grid(row=1, column=0, sticky='nw', pady=(0, 16))
         ttk.Label(content, text='This deletion is permanent and cannot be undone.\n'
                                'The ticket and its activity history and notes will be removed.',
-                  wraplength=580, justify='left', foreground='#9c2b2b',
-                  font=('Segoe UI', 11, 'bold'), style='Helpdesk.Status.TLabel').grid(
+                  wraplength=580, justify='left', foreground=DANGER_COLOR,
+                  font=BOLD_FONT, style='Helpdesk.Status.TLabel').grid(
             row=2, column=0, sticky='ew', pady=(0, 16),
         )
         ttk.Label(content, textvariable=self.feedback, wraplength=580,
@@ -73,7 +75,7 @@ class DeleteTicketDialog:
         self.cancel_button = ttk.Button(buttons, text='Cancel', command=self.cancel, style='Helpdesk.TButton')
         self.cancel_button.grid(row=0, column=1, padx=(0, 8))
         self.delete_button = ttk.Button(buttons, text='Permanently Delete', command=self.confirm_delete,
-                                        style='Helpdesk.TButton')
+                                        style='Danger.Helpdesk.TButton')
         self.delete_button.grid(row=0, column=2)
         self.delete_button.state(['disabled'])
         self.window.grab_set()

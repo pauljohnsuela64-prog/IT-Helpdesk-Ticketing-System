@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import BODY_FONT, TEXT_OPTIONS, WINDOW_PADDING
+
 from input_validation import validate_text
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from ticket_repository import CATEGORIES, PRIORITIES, TicketCreateError, create_ticket_for_user
@@ -51,7 +53,7 @@ class CreateTicketDialog:
         return self._saving
 
     def _build_widgets(self):
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(1, weight=1)
         content.rowconfigure(5, weight=1)
@@ -66,10 +68,10 @@ class CreateTicketDialog:
             )
             if field == 'category':
                 widget = ttk.Combobox(content, textvariable=self.fields[field], values=CATEGORIES,
-                                      state='readonly', font=('Segoe UI', 10))
+                                      state='readonly', font=BODY_FONT)
                 normal_state = 'readonly'
             else:
-                widget = ttk.Entry(content, textvariable=self.fields[field], font=('Segoe UI', 10))
+                widget = ttk.Entry(content, textvariable=self.fields[field], font=BODY_FONT)
                 normal_state = 'normal'
             widget.grid(row=row, column=1, sticky='ew', pady=(0, 12))
             self._widgets.append((widget, normal_state))
@@ -84,7 +86,7 @@ class CreateTicketDialog:
         description_frame.columnconfigure(0, weight=1)
         description_frame.rowconfigure(0, weight=1)
         self.description = tk.Text(description_frame, height=8, width=40, wrap='word',
-                                   font=('Segoe UI', 10), padx=8, pady=8)
+                                   padx=8, pady=8, **TEXT_OPTIONS)
         self.description.grid(row=0, column=0, sticky='nsew')
         scrollbar = ttk.Scrollbar(description_frame, orient='vertical', command=self.description.yview)
         scrollbar.grid(row=0, column=1, sticky='ns')
@@ -95,7 +97,7 @@ class CreateTicketDialog:
             row=6, column=0, sticky='w', padx=(0, 16), pady=(0, 12),
         )
         priority = ttk.Combobox(content, textvariable=self.fields['priority'], values=PRIORITIES,
-                                state='readonly', font=('Segoe UI', 10))
+                                state='readonly', font=BODY_FONT)
         priority.grid(row=6, column=1, sticky='ew', pady=(0, 12))
         self._widgets.append((priority, 'readonly'))
         ttk.Label(content, textvariable=self.feedback, wraplength=550,

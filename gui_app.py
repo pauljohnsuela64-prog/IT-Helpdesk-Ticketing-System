@@ -9,6 +9,7 @@ from gui_change_password import ChangePasswordDialog
 from gui_create_ticket import CreateTicketDialog
 from gui_dashboard import DashboardPanel
 from gui_session import HelpDeskApplication
+from gui_styles import ALTERNATE_ROW, BACKGROUND, BODY_FONT, BUTTON_GAP, WINDOW_PADDING, configure_styles
 from gui_delete_ticket import DeleteTicketDialog
 from gui_permissions import SessionPermissions, require_permission
 from gui_reports import ReportsWindow
@@ -37,7 +38,6 @@ TICKET_COLUMNS = (
     ('assigned_to', 'Assigned To', 155, 130),
     ('created_at', 'Created At', 160, 150),
 )
-BACKGROUND = '#f4f6fa'
 
 
 def ticket_row_values(ticket):
@@ -102,35 +102,10 @@ class TicketViewer:
         self.refresh_tickets()
 
     def _configure_styles(self):
-        style = ttk.Style(self.root)
-        themes = style.theme_names()
-        if 'vista' in themes:
-            style.theme_use('vista')
-        elif 'clam' in themes:
-            style.theme_use('clam')
-        style.configure('Helpdesk.TFrame', background=BACKGROUND)
-        style.configure('Helpdesk.Title.TLabel', background=BACKGROUND,
-                        foreground='#182a43', font=('Segoe UI', 18, 'bold'))
-        style.configure('Helpdesk.Subtitle.TLabel', background=BACKGROUND,
-                        foreground='#607086', font=('Segoe UI', 11))
-        style.configure('Helpdesk.Section.TLabel', background=BACKGROUND,
-                        foreground='#182a43', font=('Segoe UI', 13, 'bold'))
-        style.configure('Helpdesk.Status.TLabel', background=BACKGROUND,
-                        foreground='#526176', font=('Segoe UI', 10))
-        style.configure('Helpdesk.TButton', padding=(16, 8), font=('Segoe UI', 10))
-        style.configure('Helpdesk.Toolbar.TButton', padding=(10, 7), font=('Segoe UI', 10))
-        style.configure('Helpdesk.TMenubutton', padding=(12, 7), font=('Segoe UI', 10))
-        style.configure('Helpdesk.Treeview', rowheight=30, font=('Segoe UI', 10),
-                        background='white', fieldbackground='white')
-        style.configure('Helpdesk.Treeview.Heading', font=('Segoe UI', 10, 'bold'))
-        style.configure('Dashboard.Card.TFrame', background='white')
-        style.configure('Dashboard.Title.TLabel', background='white',
-                        foreground='#526176', font=('Segoe UI', 10))
-        style.configure('Dashboard.Count.TLabel', background='white',
-                        foreground='#182a43', font=('Segoe UI', 22, 'bold'))
+        configure_styles(self.root)
 
     def _build_widgets(self):
-        content = ttk.Frame(self.root, padding=(24, 18, 24, 14), style='Helpdesk.TFrame')
+        content = ttk.Frame(self.root, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         self.content = content
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
@@ -203,12 +178,12 @@ class TicketViewer:
         ticket_actions.grid(row=0, column=1, sticky='w')
         self.create_button = ttk.Button(ticket_actions, text='Create', command=self.open_create_ticket,
                                         width=8, style='Helpdesk.Toolbar.TButton')
-        self.create_button.grid(row=0, column=0, padx=(0, 6))
+        self.create_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
         self.update_button = ttk.Button(ticket_actions, text='Update', command=self.open_update_ticket,
                                         width=8, style='Helpdesk.Toolbar.TButton')
-        self.update_button.grid(row=0, column=1, padx=(0, 6))
+        self.update_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.delete_button = ttk.Button(ticket_actions, text='Delete', command=self.open_delete_ticket,
-                                        width=8, style='Helpdesk.Toolbar.TButton')
+                                        width=8, style='Danger.Helpdesk.Toolbar.TButton')
         self.delete_button.grid(row=0, column=2)
         if not self.permissions.allows('delete_ticket'):
             self.delete_button.state(['disabled'])
@@ -217,10 +192,10 @@ class TicketViewer:
         ticket_tools.grid(row=0, column=3, sticky='w')
         self.history_button = ttk.Button(ticket_tools, text='History', command=self.open_ticket_history,
                                          width=8, style='Helpdesk.Toolbar.TButton')
-        self.history_button.grid(row=0, column=0, padx=(0, 6))
+        self.history_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
         self.notes_button = ttk.Button(ticket_tools, text='Notes', command=self.open_ticket_notes,
                                        width=8, style='Helpdesk.Toolbar.TButton')
-        self.notes_button.grid(row=0, column=1, padx=(0, 6))
+        self.notes_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.refresh_button = ttk.Button(ticket_tools, text='Refresh', command=self.refresh_tickets,
                                          width=8, style='Helpdesk.Toolbar.TButton')
         self.refresh_button.grid(row=0, column=2)
@@ -232,8 +207,8 @@ class TicketViewer:
             row=0, column=0, sticky='w', padx=(0, 12),
         )
         self.search_term = tk.StringVar(master=self.root, value='')
-        self.search_entry = ttk.Entry(search_area, textvariable=self.search_term, font=('Segoe UI', 10))
-        self.search_entry.grid(row=0, column=1, sticky='ew', padx=(0, 10))
+        self.search_entry = ttk.Entry(search_area, textvariable=self.search_term, font=BODY_FONT)
+        self.search_entry.grid(row=0, column=1, sticky='ew', padx=(0, BUTTON_GAP))
         self.search_entry.bind('<Return>', self.perform_search)
         self.search_button = ttk.Button(search_area, text='Search', command=self.perform_search,
                                         width=8, style='Helpdesk.Toolbar.TButton')
@@ -247,7 +222,7 @@ class TicketViewer:
             views.grid(row=1, column=0, columnspan=5, sticky='ew', pady=(8, 0))
             self.all_tickets_button = ttk.Button(views, text='All Tickets', command=self.show_all_tickets,
                                                  style='Helpdesk.Toolbar.TButton')
-            self.all_tickets_button.grid(row=0, column=0, padx=(0, 10))
+            self.all_tickets_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
             self.assigned_tickets_button = ttk.Button(views, text='My Assigned Tickets', command=self.show_assigned_tickets,
                                                       style='Helpdesk.Toolbar.TButton')
             self.assigned_tickets_button.grid(row=0, column=1, padx=(0, 16))
@@ -264,7 +239,7 @@ class TicketViewer:
             self.tree.heading(field, text=heading)
             self.tree.column(field, width=width, minwidth=minimum,
                              stretch=field == 'subject', anchor='w')
-        self.tree.tag_configure('alternate', background='#f0f4fa')
+        self.tree.tag_configure('alternate', background=ALTERNATE_ROW)
         self.tree.grid(row=0, column=0, sticky='nsew')
         vertical = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
         horizontal = ttk.Scrollbar(table, orient='horizontal', command=self.tree.xview)

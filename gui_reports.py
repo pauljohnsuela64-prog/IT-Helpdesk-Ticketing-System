@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from gui_styles import ALTERNATE_ROW, BODY_FONT, BUTTON_GAP, WINDOW_PADDING
+
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from report_export import (
     REPORT_COLUMNS, ReportExportError, export_ticket_report, report_generated_at, report_row_values,
@@ -62,7 +64,7 @@ class ReportsWindow:
         return self._exporting
 
     def _build_widgets(self):
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(4, weight=1)
@@ -78,7 +80,7 @@ class ReportsWindow:
             ttk.Label(filters, text=label, style='Helpdesk.Status.TLabel').grid(
                 row=0, column=column, sticky='w', padx=(0, 12), pady=(0, 6))
             combo = ttk.Combobox(filters, values=('All',) + values, state='readonly',
-                                 width=30 if field == 'technician' else 18, font=('Segoe UI', 10),
+                                 width=30 if field == 'technician' else 18, font=BODY_FONT,
                                  **({'textvariable': self.fields[field]} if field != 'technician' else {}))
             combo.grid(row=1, column=column, sticky='ew', padx=(0, 12))
             self._filter_widgets.append(combo)
@@ -90,10 +92,10 @@ class ReportsWindow:
         controls.columnconfigure(2, weight=1)
         self.generate_button = ttk.Button(controls, text='Generate Report', command=self.generate_report,
                                           style='Helpdesk.TButton')
-        self.generate_button.grid(row=0, column=0, padx=(0, 10))
+        self.generate_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
         self.export_button = ttk.Button(controls, text='Export to Excel', command=self.export_report,
                                         style='Helpdesk.TButton')
-        self.export_button.grid(row=0, column=1, padx=(0, 10))
+        self.export_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.export_button.state(['disabled'])
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
         self.close_button.grid(row=0, column=3)
@@ -108,7 +110,7 @@ class ReportsWindow:
         for field, heading, width in REPORT_COLUMNS:
             self.tree.heading(field, text=heading)
             self.tree.column(field, width=int(width * 8), minwidth=80, stretch=field == 'subject', anchor='w')
-        self.tree.tag_configure('alternate', background='#f0f4fa')
+        self.tree.tag_configure('alternate', background=ALTERNATE_ROW)
         self.tree.grid(row=0, column=0, sticky='nsew')
         vertical = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
         horizontal = ttk.Scrollbar(table, orient='horizontal', command=self.tree.xview)

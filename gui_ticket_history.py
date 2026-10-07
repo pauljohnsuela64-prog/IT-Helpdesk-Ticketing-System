@@ -5,6 +5,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import ttk
 
+from gui_styles import ALTERNATE_ROW, BUTTON_GAP, TEXT_OPTIONS, WINDOW_PADDING
+
 from ticket_history_repository import TicketHistoryReadError, get_ticket_history
 from ticket_repository import TicketReadError, get_ticket
 
@@ -69,7 +71,7 @@ class TicketHistoryWindow:
         return not self._closed
 
     def _build_widgets(self):
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=3)
@@ -84,7 +86,7 @@ class TicketHistoryWindow:
         controls.grid(row=1, column=0, sticky='ew', pady=(0, 12))
         controls.columnconfigure(0, weight=1)
         self.refresh_button = ttk.Button(controls, text='Refresh', command=self.refresh, style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=1, padx=(0, 10))
+        self.refresh_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
         self.close_button.grid(row=0, column=2)
         table = ttk.Frame(content)
@@ -96,7 +98,7 @@ class TicketHistoryWindow:
         for field, heading, width, minimum in HISTORY_COLUMNS:
             self.tree.heading(field, text=heading)
             self.tree.column(field, width=width, minwidth=minimum, stretch=field == 'details', anchor='w')
-        self.tree.tag_configure('alternate', background='#f0f4fa')
+        self.tree.tag_configure('alternate', background=ALTERNATE_ROW)
         self.tree.grid(row=0, column=0, sticky='nsew')
         self.tree.bind('<<TreeviewSelect>>', self._show_selected_details)
         vertical = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
@@ -111,7 +113,7 @@ class TicketHistoryWindow:
         ttk.Label(details_area, text='Selected Activity Details', style='Helpdesk.Status.TLabel').grid(
             row=0, column=0, sticky='w', pady=(0, 6),
         )
-        self.details = tk.Text(details_area, height=6, width=60, wrap='word', font=('Segoe UI', 10), padx=8, pady=8)
+        self.details = tk.Text(details_area, height=6, width=60, wrap='word', padx=8, pady=8, **TEXT_OPTIONS)
         self.details.grid(row=1, column=0, sticky='nsew')
         details_scrollbar = ttk.Scrollbar(details_area, orient='vertical', command=self.details.yview)
         details_scrollbar.grid(row=1, column=1, sticky='ns')

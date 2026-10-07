@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import BODY_FONT, BUTTON_GAP, WINDOW_PADDING
+
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from user_repository import UserPasswordChangeError, change_password, validate_password_change, validate_user_id
 
@@ -27,7 +29,7 @@ class ChangePasswordDialog:
         self.window.rowconfigure(0, weight=1)
         self.window.protocol('WM_DELETE_WINDOW', self.cancel)
         self.window.bind('<Escape>', lambda event: self.cancel())
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(1, weight=1)
         content.rowconfigure(4, weight=1)
@@ -43,7 +45,7 @@ class ChangePasswordDialog:
                 ('Confirm New Password', self.confirmation)), start=1):
             ttk.Label(content, text=label, style='Helpdesk.Status.TLabel').grid(
                 row=row, column=0, sticky='w', padx=(0, 16), pady=(0, 12))
-            entry = ttk.Entry(content, textvariable=variable, show='*', font=('Segoe UI', 11))
+            entry = ttk.Entry(content, textvariable=variable, show='*', font=BODY_FONT)
             entry.grid(row=row, column=1, sticky='ew', pady=(0, 12))
             entry.bind('<Return>', self.save)
             self.entries.append(entry)
@@ -54,7 +56,7 @@ class ChangePasswordDialog:
         buttons.grid(row=5, column=0, columnspan=2, sticky='ew')
         buttons.columnconfigure(0, weight=1)
         self.cancel_button = ttk.Button(buttons, text='Cancel', command=self.cancel, style='Helpdesk.TButton')
-        self.cancel_button.grid(row=0, column=1, padx=(0, 10))
+        self.cancel_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.save_button = ttk.Button(buttons, text='Save', command=self.save, style='Helpdesk.TButton')
         self.save_button.grid(row=0, column=2)
         self.window.grab_set()

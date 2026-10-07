@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from gui_create_account import CreateAccountDialog
+from gui_styles import BACKGROUND, BODY_FONT, BUTTON_GAP, WINDOW_PADDING, configure_styles
 from input_validation import validate_text
 from password_security import validate_password
 from user_repository import UserAuthenticationError, authenticate_user, public_user
@@ -26,16 +27,12 @@ class LoginScreen:
         root.geometry('540x430')
         root.minsize(460, 380)
         root.resizable(True, True)
-        root.configure(background='#f4f6fa')
+        root.configure(background=BACKGROUND)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         root.protocol('WM_DELETE_WINDOW', self.close)
-        style = ttk.Style(root)
-        style.configure('Login.TFrame', background='#f4f6fa')
-        style.configure('Login.TLabel', background='#f4f6fa', foreground='#526176', font=('Segoe UI', 10))
-        style.configure('Login.Title.TLabel', background='#f4f6fa', foreground='#182a43', font=('Segoe UI', 18, 'bold'))
-        style.configure('Login.TButton', padding=(16, 8), font=('Segoe UI', 10))
-        self.content = ttk.Frame(root, padding=32, style='Login.TFrame')
+        configure_styles(root)
+        self.content = ttk.Frame(root, padding=WINDOW_PADDING, style='Login.TFrame')
         self.content.grid(row=0, column=0, sticky='nsew')
         self.content.columnconfigure(0, weight=1)
         self.content.rowconfigure(6, weight=1)
@@ -49,10 +46,10 @@ class LoginScreen:
         self.password = tk.StringVar(master=root, value='')
         self.feedback = tk.StringVar(master=root, value='')
         ttk.Label(self.content, text='Username', style='Login.TLabel').grid(row=2, column=0, sticky='w')
-        self.username_entry = ttk.Entry(self.content, textvariable=self.username, font=('Segoe UI', 11))
+        self.username_entry = ttk.Entry(self.content, textvariable=self.username, font=BODY_FONT)
         self.username_entry.grid(row=3, column=0, sticky='ew', pady=(6, 12))
         ttk.Label(self.content, text='Password', style='Login.TLabel').grid(row=4, column=0, sticky='w')
-        self.password_entry = ttk.Entry(self.content, textvariable=self.password, show='*', font=('Segoe UI', 11))
+        self.password_entry = ttk.Entry(self.content, textvariable=self.password, show='*', font=BODY_FONT)
         self.password_entry.grid(row=5, column=0, sticky='ew', pady=(6, 8))
         self.password_entry.bind('<Return>', self.attempt_login)
         ttk.Label(self.content, textvariable=self.feedback, wraplength=465, style='Login.TLabel').grid(
@@ -63,9 +60,9 @@ class LoginScreen:
         buttons.columnconfigure(0, weight=1)
         self.create_account_button = ttk.Button(buttons, text='Create Account', command=self.open_create_account,
                                                 style='Login.TButton')
-        self.create_account_button.grid(row=0, column=1, padx=(0, 10))
+        self.create_account_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.login_button = ttk.Button(buttons, text='Login', command=self.attempt_login, style='Login.TButton')
-        self.login_button.grid(row=0, column=2, padx=(0, 10))
+        self.login_button.grid(row=0, column=2, padx=(0, BUTTON_GAP))
         self.exit_button = ttk.Button(buttons, text='Exit', command=self.close, style='Login.TButton')
         self.exit_button.grid(row=0, column=3)
         self.username_entry.focus_set()

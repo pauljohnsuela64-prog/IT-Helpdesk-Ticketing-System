@@ -5,6 +5,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import ALTERNATE_ROW, BODY_FONT, BUTTON_GAP, WINDOW_PADDING
+
 from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
 from gui_link_user_technician import LinkUserTechnicianDialog
 from user_repository import (
@@ -71,7 +73,7 @@ class UserManagementWindow:
         return self._child_dialog is not None and self._child_dialog.is_open and self._child_dialog.is_saving
 
     def _build_widgets(self):
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
@@ -82,14 +84,14 @@ class UserManagementWindow:
         controls.columnconfigure(2, weight=1)
         self.change_button = ttk.Button(controls, text='Change User Status', command=self.open_status,
                                         style='Helpdesk.TButton')
-        self.change_button.grid(row=0, column=0, padx=(0, 10))
+        self.change_button.grid(row=0, column=0, padx=(0, BUTTON_GAP))
         self.change_button.state(['disabled'])
         self.link_button = ttk.Button(controls, text='Link Technician', command=self.open_link,
                                       style='Helpdesk.TButton')
-        self.link_button.grid(row=0, column=1, padx=(0, 10))
+        self.link_button.grid(row=0, column=1, padx=(0, BUTTON_GAP))
         self.link_button.state(['disabled'])
         self.refresh_button = ttk.Button(controls, text='Refresh', command=self.refresh, style='Helpdesk.TButton')
-        self.refresh_button.grid(row=0, column=3, padx=(0, 10))
+        self.refresh_button.grid(row=0, column=3, padx=(0, BUTTON_GAP))
         self.close_button = ttk.Button(controls, text='Close', command=self.close, style='Helpdesk.TButton')
         self.close_button.grid(row=0, column=4)
         table = ttk.Frame(content)
@@ -101,7 +103,7 @@ class UserManagementWindow:
         for field, heading, width, minimum in USER_COLUMNS:
             self.tree.heading(field, text=heading)
             self.tree.column(field, width=width, minwidth=minimum, stretch=field in ('username', 'full_name'), anchor='w')
-        self.tree.tag_configure('alternate', background='#f0f4fa')
+        self.tree.tag_configure('alternate', background=ALTERNATE_ROW)
         self.tree.grid(row=0, column=0, sticky='nsew')
         vertical = ttk.Scrollbar(table, orient='vertical', command=self.tree.yview)
         horizontal = ttk.Scrollbar(table, orient='horizontal', command=self.tree.xview)
@@ -269,7 +271,7 @@ class ChangeUserStatusDialog:
         self.window.rowconfigure(0, weight=1)
         self.window.protocol('WM_DELETE_WINDOW', self.cancel)
         self.window.bind('<Escape>', lambda event: self.cancel())
-        content = ttk.Frame(self.window, padding=24, style='Helpdesk.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Helpdesk.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(1, weight=1)
         content.rowconfigure(1, weight=1)
@@ -282,7 +284,7 @@ class ChangeUserStatusDialog:
             row=2, column=0, sticky='w', padx=(0, 16))
         self.status = tk.StringVar(master=self.window, value='')
         self.status_combo = ttk.Combobox(content, textvariable=self.status, values=USER_STATUSES,
-                                         state='disabled', font=('Segoe UI', 10))
+                                         state='disabled', font=BODY_FONT)
         self.status_combo.grid(row=2, column=1, sticky='ew')
         self.feedback = tk.StringVar(master=self.window, value='Loading current user information...')
         ttk.Label(content, textvariable=self.feedback, wraplength=530, style='Helpdesk.Status.TLabel').grid(

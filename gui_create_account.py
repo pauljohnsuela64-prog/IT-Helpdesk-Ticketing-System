@@ -4,6 +4,8 @@ from threading import Thread
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui_styles import BODY_FONT, WINDOW_PADDING
+
 from input_validation import validate_text
 from password_security import validate_password
 from user_repository import (
@@ -43,11 +45,11 @@ class CreateAccountDialog:
         self.window.rowconfigure(0, weight=1)
         self.window.protocol('WM_DELETE_WINDOW', self.cancel)
         self.window.bind('<Escape>', lambda event: self.cancel())
-        content = ttk.Frame(self.window, padding=28, style='Login.TFrame')
+        content = ttk.Frame(self.window, padding=WINDOW_PADDING, style='Login.TFrame')
         content.grid(row=0, column=0, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
-        ttk.Label(content, text='Create Account', style='Login.Title.TLabel').grid(
+        ttk.Label(content, text='Create Account', style='Login.Section.TLabel').grid(
             row=0, column=0, sticky='w', pady=(0, 12))
         self.explanation = tk.StringVar(master=self.window, value='Checking application accounts...')
         ttk.Label(content, textvariable=self.explanation, wraplength=530, style='Login.TLabel').grid(
@@ -91,7 +93,7 @@ class CreateAccountDialog:
         ttk.Label(self.form, text=label, style='Login.TLabel').grid(
             row=row, column=0, sticky='w', padx=(0, 16), pady=(0, 16))
         self._fields[field] = tk.StringVar(master=self.window, value='')
-        entry = ttk.Entry(self.form, textvariable=self._fields[field], font=('Segoe UI', 11),
+        entry = ttk.Entry(self.form, textvariable=self._fields[field], font=BODY_FONT,
                           **({'show': '*'} if masked else {}))
         entry.grid(row=row, column=1, sticky='ew', pady=(0, 16))
         self._widgets.append((entry, 'normal'))
@@ -120,13 +122,13 @@ class CreateAccountDialog:
             row=2, column=0, sticky='w', padx=(0, 16), pady=(0, 16))
         self._fields['role'] = tk.StringVar(master=self.window, value='Admin' if first_account else 'Technician')
         role = ttk.Combobox(self.form, textvariable=self._fields['role'], state='readonly',
-                            values=('Admin',) if first_account else USER_ROLES, font=('Segoe UI', 11))
+                            values=('Admin',) if first_account else USER_ROLES, font=BODY_FONT)
         role.grid(row=2, column=1, sticky='ew', pady=(0, 16))
         self._widgets.append((role, 'readonly'))
         role.bind('<<ComboboxSelected>>', self._role_changed)
         self.technician_label = ttk.Label(self.form, text='Linked Technician', style='Login.TLabel')
         self.technician_label.grid(row=3, column=0, sticky='w', padx=(0, 16), pady=(0, 16))
-        self.technician_combo = ttk.Combobox(self.form, values=(), state='readonly', font=('Segoe UI', 11))
+        self.technician_combo = ttk.Combobox(self.form, values=(), state='readonly', font=BODY_FONT)
         self.technician_combo.grid(row=3, column=1, sticky='ew', pady=(0, 16))
         self._technician_rows = [self.technician_label, self.technician_combo]
         self._widgets.append((self.technician_combo, 'readonly'))
