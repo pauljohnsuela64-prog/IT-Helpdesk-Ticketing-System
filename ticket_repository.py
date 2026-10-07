@@ -4,7 +4,9 @@ import mysql.connector
 from database import get_connection
 from input_validation import validate_text
 from technician_repository import TechnicianReadError, get_active_technician, get_technician, validate_technician_id
-from ticket_history_repository import SETUP_MESSAGE, record_ticket_created, record_ticket_updated
+from ticket_history_repository import (
+    SETUP_MESSAGE, TicketHistoryWriteError, record_ticket_created, record_ticket_updated,
+)
 from ticket_access import (
     ADMIN_ASSIGNMENT_ONLY, ASSIGNMENT_SETUP_MESSAGE, TicketAccessError, authorize_ticket_write,
 )
@@ -272,16 +274,18 @@ def update_ticket(ticket_id, changes, *, technician_id=None, user_id=None, sessi
                         tuple(values[field] for field in EDITABLE_FIELDS)
                         + (assigned_id, entering_resolved, resolved_at, ticket_id),
                     )
-                    record_ticket_updated(cursor, ticket_id, current, values)
+                    record_ticket_updated(cursor, ticket_id, current, values, performed_by_user_id=user_id)
                 connection.commit()
                 return True
-            except (mysql.connector.Error, TicketUpdateError, TicketAccessError):
+            except (mysql.connector.Error, TicketUpdateError, TicketAccessError, TicketHistoryWriteError):
                 try:
                     connection.rollback()
                 except mysql.connector.Error:
                     pass
                 raise
     except TicketAccessError as error:
+        raise TicketUpdateError(str(error)) from None
+    except TicketHistoryWriteError as error:
         raise TicketUpdateError(str(error)) from None
     except ValueError:
         raise TicketUpdateError(
@@ -302,8 +306,16 @@ class TicketCreateError(Exception):
     """A safe, user-facing error when saving a ticket fails."""
 
 
-def create_ticket(employee_name, department, category, subject, description, priority):
+def create_ticket_for_user(user_id, employee_name, department, category, subject, description, priority):
+    """GUI creation requires a real session ID; never fall back to CLI attribution."""
+    validate_user_id(user_id)
+    return create_ticket(employee_name, department, category, subject, description, priority, user_id=user_id)
+
+
+def create_ticket(employee_name, department, category, subject, description, priority, *, user_id=None):
     """Validate and save one ticket; MySQL supplies IDs and default values."""
+    if user_id is not None:
+        validate_user_id(user_id)
     fields = {
         'Employee name': (employee_name, 100),
         'Department': (department, 100),
@@ -323,6 +335,12 @@ def create_ticket(employee_name, department, category, subject, description, pri
         with get_connection() as connection:
             try:
                 with connection.cursor() as cursor:
+                    if user_id is not None:
+                        cursor.execute('SELECT role, status FROM helpdesk.users WHERE user_id = %s FOR UPDATE',
+                                       (user_id,))
+                        actor = cursor.fetchone()
+                        if actor is None or actor[0] not in ('Admin', 'Technician') or actor[1] != 'Active':
+                            raise TicketCreateError('You do not have permission to perform this action. Please log in again.')
                     cursor.execute(
                         'INSERT INTO helpdesk.tickets '
                         '(employee_name, department, category, subject, description, priority) '
@@ -331,15 +349,17 @@ def create_ticket(employee_name, department, category, subject, description, pri
                          validated['Subject'], validated['Description'], priority),
                     )
                     ticket_id = cursor.lastrowid
-                    record_ticket_created(cursor, ticket_id)
+                    record_ticket_created(cursor, ticket_id, performed_by_user_id=user_id)
                 connection.commit()
                 return ticket_id
-            except mysql.connector.Error:
+            except (mysql.connector.Error, TicketCreateError, TicketHistoryWriteError):
                 try:
                     connection.rollback()
                 except mysql.connector.Error:
                     pass
                 raise
+    except TicketHistoryWriteError as error:
+        raise TicketCreateError(str(error)) from None
     except ValueError:
         raise TicketCreateError(
             'Check your environment settings. DB_NAME must be helpdesk and '

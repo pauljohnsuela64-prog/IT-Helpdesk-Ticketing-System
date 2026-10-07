@@ -12,7 +12,8 @@ from ticket_repository import TicketReadError, get_ticket
 HISTORY_COLUMNS = (
     ('created_at', 'Date/Time', 180, 170),
     ('action', 'Action', 210, 180),
-    ('details', 'Details', 650, 400),
+    ('details', 'Details', 480, 300),
+    ('performed_by', 'Performed By', 230, 180),
 )
 
 
@@ -25,8 +26,16 @@ def _readable(value, multiline=False):
                    else repr(character)[1:-1] for character in str(value))
 
 
+def history_performed_by(entry):
+    if (entry.get('performed_by_user_id') is None or not entry.get('performed_by_full_name')
+            or not entry.get('performed_by_role')):
+        return 'System / Legacy'
+    return f'{_readable(entry["performed_by_full_name"])} ({_readable(entry["performed_by_role"])})'
+
+
 def history_row_values(entry):
-    return tuple(_readable(entry.get(field)) for field, _, _, _ in HISTORY_COLUMNS)
+    return tuple(history_performed_by(entry) if field == 'performed_by' else _readable(entry.get(field))
+                 for field, _, _, _ in HISTORY_COLUMNS)
 
 
 class TicketHistoryWindow:
@@ -42,7 +51,7 @@ class TicketHistoryWindow:
         self._entries = {}
         self.window = tk.Toplevel(parent)
         self.window.title(f'Ticket History #{ticket_id}')
-        self.window.geometry('1120x700')
+        self.window.geometry('1250x700')
         self.window.minsize(850, 560)
         self.window.resizable(True, True)
         self.window.transient(parent)
@@ -186,7 +195,8 @@ class TicketHistoryWindow:
         entry = self._entries.get(selection[0]) if selection else None
         if entry is None:
             return
-        self._set_details(f'{_readable(entry.get("created_at"))} | {_readable(entry.get("action"))}\n\n'
+        self._set_details(f'{_readable(entry.get("created_at"))} | {_readable(entry.get("action"))}\n'
+                          f'Performed By: {history_performed_by(entry)}\n\n'
                           f'{_readable(entry.get("details"), multiline=True)}')
 
     def _set_details(self, text):

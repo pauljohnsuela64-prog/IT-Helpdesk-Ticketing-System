@@ -47,8 +47,11 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.cursor.fetchall.return_value = rows
         self.assertEqual(history.get_ticket_history(7), rows)
         self.cursor.execute.assert_called_once_with(
-            'SELECT history_id, ticket_id, action, details, created_at '
-            'FROM helpdesk.ticket_history WHERE ticket_id = %s ORDER BY created_at, history_id', (7,),
+            'SELECT h.history_id, h.ticket_id, h.action, h.details, h.created_at, '
+            'h.performed_by_user_id, u.full_name AS performed_by_full_name, '
+            'u.role AS performed_by_role FROM helpdesk.ticket_history AS h '
+            'LEFT JOIN helpdesk.users AS u ON u.user_id = h.performed_by_user_id '
+            'WHERE h.ticket_id = %s ORDER BY h.created_at, h.history_id', (7,),
         )
         self.connection.commit.assert_not_called()
 
@@ -84,8 +87,11 @@ class TicketTransactionTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
 
     def activity(self):
-        return [item.args[1] for item in self.cursor.execute.call_args_list
+        entries = [item.args[1] for item in self.cursor.execute.call_args_list
                 if item.args[0].startswith('INSERT INTO helpdesk.ticket_history')]
+        # These are CLI calls: every event must explicitly have no GUI actor.
+        self.assertTrue(all(entry[-1] is None for entry in entries))
+        return [entry[:3] for entry in entries]
 
     def test_creation_logs_actual_defaults_in_same_transaction_and_keeps_ticket_id(self):
         def execute(query, parameters):
@@ -98,7 +104,7 @@ class TicketTransactionTests(unittest.TestCase):
         calls = self.cursor.execute.call_args_list
         self.assertTrue(calls[0].args[0].startswith('INSERT INTO helpdesk.tickets '))
         self.assertIn("CONCAT('Priority: ', priority, ', Status: ', status)", calls[1].args[0])
-        self.assertEqual(calls[1].args[1], ('Ticket Created', 7))
+        self.assertEqual(calls[1].args[1], ('Ticket Created', None, 7))
         self.connect.assert_called_once_with()
         self.connection.commit.assert_called_once_with()
 
@@ -160,7 +166,7 @@ class TicketTransactionTests(unittest.TestCase):
         tickets.update_ticket(7, {'subject': value})
         query, parameters = self.cursor.execute.call_args.args
         self.assertNotIn(value, query)
-        self.assertEqual(parameters, (7, 'Ticket Information Updated', f'Subject: Printer issue -> {value}'))
+        self.assertEqual(parameters, (7, 'Ticket Information Updated', f'Subject: Printer issue -> {value}', None))
 
     def test_long_descriptions_are_not_truncated_on_the_ticket(self):
         self.cursor.fetchone.return_value = {**ticket(), 'description': '🙂' * 16000}

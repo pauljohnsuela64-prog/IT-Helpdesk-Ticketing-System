@@ -5,13 +5,17 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from input_validation import validate_text
-from ticket_repository import CATEGORIES, PRIORITIES, TicketCreateError, create_ticket
+from gui_permissions import PERMISSION_DENIED, SessionPermissions, require_permission
+from ticket_repository import CATEGORIES, PRIORITIES, TicketCreateError, create_ticket_for_user
+from user_repository import public_user
 
 
 class CreateTicketDialog:
-    def __init__(self, parent, on_created):
+    def __init__(self, parent, on_created, permissions=None, user=None):
         self.parent = parent
         self.on_created = on_created
+        self.user = public_user(user) if user is not None else None
+        self.permissions = permissions if permissions is not None else SessionPermissions(self.user)
         self._results = Queue()
         self._saving = False
         self._closed = False
@@ -130,6 +134,8 @@ class CreateTicketDialog:
     def save(self):
         if self._closed or self._saving:
             return
+        if not require_permission(self.permissions, 'create_ticket', self.window):
+            return
         try:
             values = self._validated_values()
         except ValueError as error:
@@ -143,7 +149,9 @@ class CreateTicketDialog:
     def _save_ticket(self, values):
         """The worker uses only repository data; Tkinter stays on the main thread."""
         try:
-            ticket_id = create_ticket(*values)
+            if not self.permissions.allows('create_ticket') or self.user is None:
+                raise TicketCreateError(PERMISSION_DENIED)
+            ticket_id = create_ticket_for_user(self.user['user_id'], *values)
         except (TicketCreateError, ValueError) as error:
             self._results.put((None, str(error)))
         except Exception:

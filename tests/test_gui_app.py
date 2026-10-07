@@ -265,7 +265,8 @@ class CreateDialogIntegrationTests(unittest.TestCase):
             create.return_value.is_open = True
             self.viewer.open_create_ticket()
             self.viewer.open_create_ticket()
-        create.assert_called_once_with(self.viewer.root, self.viewer._refresh_after_creation)
+        create.assert_called_once_with(self.viewer.root, self.viewer._refresh_after_creation,
+                                       permissions=self.viewer.permissions, user=self.viewer.user)
         create.return_value.focus.assert_called_once_with()
 
     def test_closed_form_can_be_opened_again(self):

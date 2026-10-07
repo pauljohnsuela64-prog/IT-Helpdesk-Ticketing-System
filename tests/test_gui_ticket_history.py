@@ -222,9 +222,9 @@ class HistoryDisplayTests(unittest.TestCase):
     def test_datetime_action_and_details_format_without_mutating_records(self):
         entry = activities()[0]
         self.assertEqual(history_gui.history_row_values(entry),
-                         ('2026-10-06 09:00:00', 'Ticket Created', 'Priority: Medium, Status: Open'))
+                         ('2026-10-06 09:00:00', 'Ticket Created', 'Priority: Medium, Status: Open', 'System / Legacy'))
         self.assertEqual(entry, activities()[0])
-        self.assertEqual(history_gui.history_row_values({}), ('-', '-', '-'))
+        self.assertEqual(history_gui.history_row_values({}), ('-', '-', '-', 'System / Legacy'))
 
     def test_multiline_details_have_single_table_row_and_complete_readonly_pane(self):
         window = history_without_window()
@@ -232,7 +232,8 @@ class HistoryDisplayTests(unittest.TestCase):
         window._display_history([entry])
         self.assertEqual(window.tree.insert.call_args.kwargs['values'][2], 'First line\\nSecond line\\tvalue\\x00')
         self.assertEqual(window.details.insert.call_args.args[1],
-                         '2026-10-06 09:00:00 | Ticket Created\n\nFirst line\nSecond line\tvalue\\x00')
+                         '2026-10-06 09:00:00 | Ticket Created\nPerformed By: System / Legacy\n\n'
+                         'First line\nSecond line\tvalue\\x00')
         self.assertEqual(window.details.configure.call_args_list[-1], call(state='disabled'))
 
     def test_repository_order_is_preserved_instead_of_sorting_by_id(self):
@@ -281,8 +282,9 @@ class HistoryDisplayTests(unittest.TestCase):
              patch.object(history_gui.ttk, 'Scrollbar') as scrollbar, patch.object(history_gui.ttk, 'Button') as button, \
              patch.object(history_gui.TicketHistoryWindow, 'refresh') as refresh:
             window = history_gui.TicketHistoryWindow(MagicMock(), 7)
-        self.assertEqual(tree.call_args.kwargs['columns'], ('created_at', 'action', 'details'))
-        self.assertEqual([item.kwargs['text'] for item in window.tree.heading.call_args_list], ['Date/Time', 'Action', 'Details'])
+        self.assertEqual(tree.call_args.kwargs['columns'], ('created_at', 'action', 'details', 'performed_by'))
+        self.assertEqual([item.kwargs['text'] for item in window.tree.heading.call_args_list],
+                         ['Date/Time', 'Action', 'Details', 'Performed By'])
         tree.return_value.bind.assert_called_once_with('<<TreeviewSelect>>', window._show_selected_details)
         self.assertEqual({item.kwargs['text']: item.kwargs['command'] for item in button.call_args_list},
                          {'Refresh': refresh, 'Close': window.close})
@@ -315,7 +317,7 @@ class ReadOnlyRepositoryIntegrationTests(unittest.TestCase):
             self.assertIn('helpdesk.', query)
             self.assertNotIn('FOR UPDATE', query)
         for item in (calls[1], calls[3]):
-            self.assertIn('ORDER BY created_at, history_id', item.args[0])
+            self.assertIn('ORDER BY h.created_at, h.history_id', item.args[0])
         connection.commit.assert_not_called()
         self.assertEqual(window._results.get_nowait(), (ticket(), activities(), None))
 

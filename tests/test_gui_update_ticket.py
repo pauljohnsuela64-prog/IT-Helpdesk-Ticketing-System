@@ -393,9 +393,10 @@ class RepositoryIntegrationTests(unittest.TestCase):
         calls = cursor.execute.call_args_list
         update = next(item.args for item in calls if item.args[0].startswith('UPDATE helpdesk.tickets'))
         activities = [item.args[1] for item in calls if item.args[0].startswith('INSERT INTO helpdesk.ticket_history')]
+        self.assertTrue(all(activity[3] == dialog.user['user_id'] for activity in activities))
         connection.commit.assert_called_once_with()
         self.assertEqual(update[0].count('%s'), len(update[1]))
-        return dict(zip(repository.EDITABLE_FIELDS, update[1])), update[1], activities
+        return dict(zip(repository.EDITABLE_FIELDS, update[1])), update[1], [activity[:3] for activity in activities]
 
     def test_gui_assignment_preserves_repository_status_resolution_and_history(self):
         for status in update_gui.STATUSES:

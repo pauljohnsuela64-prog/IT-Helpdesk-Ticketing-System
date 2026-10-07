@@ -354,7 +354,9 @@ class TicketViewer:
             self._display_tickets(tickets)
 
     def open_create_ticket(self):
-        if self._closed or self._focus_notes_dialog():
+        if self._closed or not require_permission(self.permissions, 'create_ticket', self.root):
+            return
+        if self._focus_notes_dialog():
             return
         for dialog in (self._update_dialog, self._delete_dialog, self._technician_window, self._user_window, self._password_dialog):
             if dialog is not None and dialog.is_open:
@@ -363,7 +365,8 @@ class TicketViewer:
         if self._create_dialog is not None and self._create_dialog.is_open:
             self._create_dialog.focus()
             return
-        self._create_dialog = CreateTicketDialog(self.root, self._refresh_after_creation)
+        self._create_dialog = CreateTicketDialog(self.root, self._refresh_after_creation,
+                                                 permissions=self.permissions, user=self.user)
 
     def open_update_ticket(self):
         if self._closed or not require_permission(self.permissions, 'update_ticket', self.root):

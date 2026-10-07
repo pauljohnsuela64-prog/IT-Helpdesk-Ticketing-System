@@ -1556,3 +1556,83 @@ history, notes, and search/refresh behavior retain their existing functionality.
    .venv/Scripts/python.exe -m unittest discover -s tests -p '*setup_ticket_assignments.py' -v
    .venv/Scripts/python.exe -m unittest discover -s tests
    ```
+
+## User Attribution for Ticket Activity History
+
+New GUI ticket creation and updates record the authenticated application user's
+`user_id` in `ticket_history.performed_by_user_id`. Every existing status,
+priority, assignment/reassignment/unassignment, and information-change event
+uses that same actor ID. Ticket changes and their history commit together; a
+history failure rolls back the ticket write. Unchanged saves still add no events.
+Notes retain their existing behavior and do not create automatic history.
+
+### Required migration
+
+Close the application and run this from the project directory in Git Bash before
+launching this version:
+
+```bash
+.venv/Scripts/python.exe setup_history_user_attribution.py
+```
+
+If the application MySQL account lacks setup privileges (for example error 1142),
+use the MySQL root account with a private password prompt:
+
+```bash
+winpty .venv/Scripts/python.exe setup_history_user_attribution.py --admin
+```
+
+This repeatable script adds only a nullable INT column, its index, and a foreign
+key to `helpdesk.users.user_id` with `ON DELETE SET NULL`. It matches the existing
+user ID's signed/unsigned type, reuses compatible schema elements, rejects
+incompatible ones without replacing them, and can resume after partial DDL setup.
+It never rewrites existing events or attempts to infer an author from names.
+Only `helpdesk.ticket_history` is altered. Existing rows receive NULL attribution;
+the original history setup remains responsible for creating the base table.
+The existing `helpdesk.users` and `helpdesk.ticket_history` tables must exist first.
+
+The GUI History table now shows Date/Time, Action, Details, and Performed By.
+Attributed entries display the user's current full name and role, even if that
+account later becomes Inactive. Unattributed entries, including old history and
+CLI activity, show `System / Legacy`. The full-details pane also shows the actor.
+History still loads from oldest to newest. No password or password hash is read
+by the history viewer. Future user deletion would preserve the history and clear
+its user reference; this milestone does not add user deletion.
+
+### Manual verification
+
+1. Run the migration twice; both runs should succeed. Launch the GUI:
+
+   ```bash
+   .venv/Scripts/python.exe gui_app.py
+   ```
+
+2. Log in as an Admin and create a disposable ticket. Open View History and check
+   that exactly one Ticket Created event shows that Admin's full name and `(Admin)`.
+3. Update its priority and subject, then confirm. Refresh History and check that
+   Priority Changed and Ticket Information Updated each appear once with the
+   same Admin attribution. Assign an Active technician, reassign to another, and
+   unassign; each corresponding event must show the acting Admin, not the assigned
+   technician. Open-to-Assigned status changes must also show the acting Admin.
+4. Assign the ticket to a linked Active Technician account. Log out and log in as
+   that Technician. Update the ticket's status/priority and refresh History; new
+   events must show that user's full name and `(Technician)`, while earlier Admin
+   events keep their original actor. Resolve and reopen to check resolution-time
+   behavior still works. Create another ticket and check its creation attribution.
+5. As Technician, attempt to update an unassigned ticket or another technician's
+   ticket. Expect the existing permission denial and no new history. Viewing
+   history for any ticket remains allowed.
+6. Log out and log back in as Admin; create or update again and verify new events
+   use the Admin account. Cancel an update and save an unchanged ticket; neither
+   should increase its history count. Add a note and confirm history stays unchanged.
+7. Open an older ticket with pre-migration history. Its existing entries must be
+   unchanged and show `System / Legacy`. Create/update a disposable ticket through
+   `.venv/Scripts/python.exe app.py`; view its history in the GUI and expect the
+   same legacy label for those new CLI actions.
+8. Verify login/logout, search, My Assigned Tickets, dashboard/Refresh, notes,
+   user/technician management, and existing delete permissions still work.
+   Run the complete automated suite (no live database writes):
+
+   ```bash
+   .venv/Scripts/python.exe -m unittest discover -s tests
+   ```

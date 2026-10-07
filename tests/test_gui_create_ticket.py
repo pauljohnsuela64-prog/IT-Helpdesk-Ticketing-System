@@ -17,6 +17,8 @@ def dialog_without_window(data=None):
     dialog.parent = MagicMock()
     dialog.window = MagicMock()
     dialog.on_created = MagicMock()
+    dialog.user = dict(user_id=7, role='Admin', status='Active')
+    dialog.permissions = create_gui.SessionPermissions(dialog.user)
     dialog.fields = {}
     for field in ('employee_name', 'department', 'category', 'subject', 'priority'):
         variable = MagicMock()
@@ -108,9 +110,9 @@ class SaveTests(unittest.TestCase):
 
     def test_worker_reuses_create_repository_without_reading_or_updating_tkinter(self):
         values = ('Alice Reyes', 'IT', 'Hardware', 'PC 3', 'Checked cable.', 'Medium')
-        with patch.object(create_gui, 'create_ticket', return_value=42) as save:
+        with patch.object(create_gui, 'create_ticket_for_user', return_value=42) as save:
             self.dialog._save_ticket(values)
-        save.assert_called_once_with(*values)
+        save.assert_called_once_with(7, *values)
         self.assertEqual(self.dialog._results.get_nowait(), (42, None))
         self.assertEqual(self.dialog.window.mock_calls, [])
         self.assertEqual(self.dialog.feedback.mock_calls, [])
@@ -121,14 +123,14 @@ class SaveTests(unittest.TestCase):
     def test_database_and_repository_validation_errors_are_queued(self):
         for failure in (create_gui.TicketCreateError('Check MySQL.'), ValueError('Invalid category.')):
             with self.subTest(failure=type(failure).__name__):
-                with patch.object(create_gui, 'create_ticket', side_effect=failure):
+                with patch.object(create_gui, 'create_ticket_for_user', side_effect=failure):
                     self.dialog._save_ticket(('Alice', 'IT', 'Hardware', 'PC 3', 'Checked cable.', 'Medium'))
                 self.assertEqual(self.dialog._results.get_nowait(), (None, str(failure)))
                 self.dialog.window.destroy.assert_not_called()
                 self.dialog.on_created.assert_not_called()
 
     def test_unexpected_error_does_not_expose_private_details_or_claim_success(self):
-        with patch.object(create_gui, 'create_ticket', side_effect=RuntimeError('private details')):
+        with patch.object(create_gui, 'create_ticket_for_user', side_effect=RuntimeError('private details')):
             self.dialog._save_ticket(('Alice', 'IT', 'Hardware', 'PC 3', 'Checked cable.', 'Medium'))
         ticket_id, error = self.dialog._results.get_nowait()
         self.assertIsNone(ticket_id)
@@ -182,7 +184,7 @@ class SaveTests(unittest.TestCase):
         self.dialog.window.destroy.assert_not_called()
 
     def test_cancel_before_save_closes_once_without_saving_or_refreshing(self):
-        with patch.object(create_gui, 'create_ticket') as save, patch.object(create_gui, 'Thread') as worker:
+        with patch.object(create_gui, 'create_ticket_for_user') as save, patch.object(create_gui, 'Thread') as worker:
             self.dialog.cancel()
             self.dialog.cancel()
             self.dialog.save()
@@ -219,7 +221,7 @@ class FormConstructionTests(unittest.TestCase):
              patch.object(create_gui.ttk, 'Entry'), patch.object(create_gui.ttk, 'Scrollbar'), \
              patch.object(create_gui.ttk, 'Combobox') as combo, \
              patch.object(create_gui.ttk, 'Button') as button, \
-             patch.object(create_gui, 'create_ticket') as save:
+             patch.object(create_gui, 'create_ticket_for_user') as save:
             dialog = create_gui.CreateTicketDialog(MagicMock(), MagicMock())
         self.assertEqual([item.kwargs['values'] for item in combo.call_args_list],
                          [create_gui.CATEGORIES, create_gui.PRIORITIES])
