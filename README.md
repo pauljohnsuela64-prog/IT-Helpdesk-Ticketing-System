@@ -2,6 +2,36 @@
 
 A Python + MySQL based IT Help Desk Ticketing System.
 
+## Screenshots
+
+### Dashboard
+
+![IT Help Desk dashboard](Screenshots/dashboard.jpg)
+
+### Create a Ticket
+
+![Create a new ticket](Screenshots/create%20ticket.jpg)
+
+### Update a Ticket
+
+![Update an existing ticket](Screenshots/update%20ticket.jpg)
+
+### Ticket Notes
+
+![Add notes to a ticket](Screenshots/add%20notes%20to%20a%20ticket.jpg)
+
+### User Management
+
+![Application user management](Screenshots/application%20user%20management.jpg)
+
+### Change User Status
+
+![Change user status to Active or Inactive](Screenshots/change%20user%20status%20Active%20or%20Inactive.jpg)
+
+### Reports and Excel Export
+
+![Generate ticket reports and export to Excel](Screenshots/ticket%20reports%20%2C%20generate%20reports%20or%20export%20to%20excel.jpg)
+
 ## Windows executable
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for building `ITHelpDesk.exe`, configuring its
