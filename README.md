@@ -36,37 +36,37 @@ external `.env`, and deploying with a local or central MySQL database.
 
 Overview of ticket statistics, ticket statuses, priority counts, and active technicians.
 
-<img src="screenshots/dashboard.jpg" width="900" alt="Help Desk Dashboard">
+<img src="Screenshots/dashboard.jpg" width="900" alt="Help Desk Dashboard">
 
 ### Create Ticket
 
 Create a new support ticket with employee information, category, description, and priority.
 
-<img src="screenshots/create ticket.jpg" width="800" alt="Create Ticket">
+<img src="Screenshots/create ticket.jpg" width="800" alt="Create Ticket">
 
 ### Update Ticket
 
 Update ticket details, status, priority, and technician assignment.
 
-<img src="screenshots/update ticket.jpg" width="800" alt="Update Ticket">
+<img src="Screenshots/update ticket.jpg" width="800" alt="Update Ticket">
 
 ### Ticket Notes
 
 Technicians can add troubleshooting notes and updates to assigned tickets.
 
-<img src="screenshots/add notes to a ticket.jpg" width="800" alt="Add Notes to a Ticket">
+<img src="Screenshots/add notes to a ticket.jpg" width="800" alt="Add Notes to a Ticket">
 
 ### Application User Management
 
 Administrators can view and manage application user accounts.
 
-<img src="screenshots/application user management.jpg" width="850" alt="Application User Management">
+<img src="Screenshots/application user management.jpg" width="850" alt="Application User Management">
 
 ### User Status Management
 
 Administrators can activate or deactivate user accounts.
 
-<img src="screenshots/change user status Active or Inactive.jpg" width="800" alt="Change User Status">
+<img src="Screenshots/change user status Active or Inactive.jpg" width="800" alt="Change User Status">
 
 ### Ticket Reports and Excel Export
 
