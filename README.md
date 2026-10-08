@@ -2,36 +2,6 @@
 
 A Python + MySQL based IT Help Desk Ticketing System.
 
-## Screenshots
-
-### Dashboard
-
-![IT Help Desk dashboard](Screenshots/dashboard.jpg)
-
-### Create a Ticket
-
-![Create a new ticket](Screenshots/create%20ticket.jpg)
-
-### Update a Ticket
-
-![Update an existing ticket](Screenshots/update%20ticket.jpg)
-
-### Ticket Notes
-
-![Add notes to a ticket](Screenshots/add%20notes%20to%20a%20ticket.jpg)
-
-### User Management
-
-![Application user management](Screenshots/application%20user%20management.jpg)
-
-### Change User Status
-
-![Change user status to Active or Inactive](Screenshots/change%20user%20status%20Active%20or%20Inactive.jpg)
-
-### Reports and Excel Export
-
-![Generate ticket reports and export to Excel](Screenshots/ticket%20reports%20%2C%20generate%20reports%20or%20export%20to%20excel.jpg)
-
 ## Windows executable
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for building `ITHelpDesk.exe`, configuring its
@@ -39,7 +9,7 @@ external `.env`, and deploying with a local or central MySQL database.
 
 ## Project Status
 
-🚧 In Development
+✅ Completed
 
 ## Technologies
 
@@ -50,15 +20,59 @@ external `.env`, and deploying with a local or central MySQL database.
 
 ## Features
 
-- [ ] Create tickets
-- [ ] View tickets
-- [ ] Search tickets
-- [ ] Update tickets
-- [ ] Assign tickets
-- [ ] Ticket status
-- [ ] Dashboard
-- [ ] User authentication
-- [ ] Reports
+- [x] Create tickets
+- [x] View tickets
+- [x] Search tickets
+- [x] Update tickets
+- [x] Assign tickets
+- [x] Ticket status
+- [x] Dashboard
+- [x] User authentication
+- [x] Reports
+
+## 📸 Application Screenshots
+
+### Dashboard
+
+Overview of ticket statistics, ticket statuses, priority counts, and active technicians.
+
+<img src="screenshots/dashboard.jpg" width="900" alt="Help Desk Dashboard">
+
+### Create Ticket
+
+Create a new support ticket with employee information, category, description, and priority.
+
+<img src="screenshots/create ticket.jpg" width="800" alt="Create Ticket">
+
+### Update Ticket
+
+Update ticket details, status, priority, and technician assignment.
+
+<img src="screenshots/update ticket.jpg" width="800" alt="Update Ticket">
+
+### Ticket Notes
+
+Technicians can add troubleshooting notes and updates to assigned tickets.
+
+<img src="screenshots/add notes to a ticket.jpg" width="800" alt="Add Notes to a Ticket">
+
+### Application User Management
+
+Administrators can view and manage application user accounts.
+
+<img src="screenshots/application user management.jpg" width="850" alt="Application User Management">
+
+### User Status Management
+
+Administrators can activate or deactivate user accounts.
+
+<img src="screenshots/change user status Active or Inactive.jpg" width="800" alt="Change User Status">
+
+### Ticket Reports and Excel Export
+
+Administrators can filter ticket reports, preview results, and export them to Excel.
+
+<img src="screenshots/ticket reports , generate reports or export to excel.jpg" width="900" alt="Ticket Reports and Excel Export">
 
 ## Technician Management
 
